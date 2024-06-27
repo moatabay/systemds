@@ -19,6 +19,8 @@
 
 package org.apache.sysds.runtime.matrix.data;
 
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -31,31 +33,9 @@ import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.sysds.runtime.DMLRuntimeException;
-import org.apache.sysds.runtime.data.DenseBlock;
-import org.apache.sysds.runtime.data.SparseBlock;
-import org.apache.sysds.runtime.data.SparseBlockCSR;
-import org.apache.sysds.runtime.data.SparseBlockFactory;
-import org.apache.sysds.runtime.data.SparseBlockMCSR;
-import org.apache.sysds.runtime.data.SparseRow;
-import org.apache.sysds.runtime.data.SparseRowVector;
-import org.apache.sysds.runtime.functionobjects.And;
-import org.apache.sysds.runtime.functionobjects.Builtin;
+import org.apache.sysds.runtime.data.*;
+import org.apache.sysds.runtime.functionobjects.*;
 import org.apache.sysds.runtime.functionobjects.Builtin.BuiltinCode;
-import org.apache.sysds.runtime.functionobjects.Divide;
-import org.apache.sysds.runtime.functionobjects.Equals;
-import org.apache.sysds.runtime.functionobjects.GreaterThan;
-import org.apache.sysds.runtime.functionobjects.GreaterThanEquals;
-import org.apache.sysds.runtime.functionobjects.LessThan;
-import org.apache.sysds.runtime.functionobjects.LessThanEquals;
-import org.apache.sysds.runtime.functionobjects.Minus;
-import org.apache.sysds.runtime.functionobjects.MinusMultiply;
-import org.apache.sysds.runtime.functionobjects.Multiply;
-import org.apache.sysds.runtime.functionobjects.Multiply2;
-import org.apache.sysds.runtime.functionobjects.NotEquals;
-import org.apache.sysds.runtime.functionobjects.Plus;
-import org.apache.sysds.runtime.functionobjects.PlusMultiply;
-import org.apache.sysds.runtime.functionobjects.Power2;
-import org.apache.sysds.runtime.functionobjects.ValueFunction;
 import org.apache.sysds.runtime.matrix.operators.BinaryOperator;
 import org.apache.sysds.runtime.matrix.operators.ScalarOperator;
 import org.apache.sysds.runtime.matrix.operators.UnaryOperator;
@@ -71,10 +51,13 @@ import org.apache.sysds.runtime.util.UtilFunctions;
  * and sparse-unsafe operations.
  * 
  */
-public class LibMatrixBincell {
+public class LibMatrixBincellFFM {
 
-	private static final Log LOG = LogFactory.getLog(LibMatrixBincell.class.getName());
+	private static final Log LOG = LogFactory.getLog(LibMatrixBincellFFM.class.getName());
 	private static final long PAR_NUMCELL_THRESHOLD2 = 16*1024;   //Min 16K elements
+	public static MemorySegment memorySegment1, memorySegment2, memorySegmentRet;
+	public static MemorySegment[] memorySegments1;
+	private static final ValueLayout.OfDouble layout = ValueLayout.JAVA_DOUBLE;
 
 	public enum BinaryAccessType {
 		MATRIX_MATRIX,
@@ -91,8 +74,8 @@ public class LibMatrixBincell {
 				|| this == ROW_VECTOR_MATRIX;
 		}
 	}
-	
-	private LibMatrixBincell() {
+
+	private LibMatrixBincellFFM() {
 		//prevent instantiation via private constructor
 	}
 	
@@ -160,7 +143,7 @@ public class LibMatrixBincell {
 			||(!op.sparseSafe && ret.isInSparseFormat()) ) {
 			throw new DMLRuntimeException("Wrong output representation for safe="+op.sparseSafe+": "+m1.isInSparseFormat()+", "+ret.isInSparseFormat());
 		}
-		
+
 		//execute binary cell operations
 		if(op.sparseSafe)
 			safeBinaryScalar(m1, ret, op, 0, m1.rlen);
@@ -487,8 +470,7 @@ public class LibMatrixBincell {
 	public static boolean isSparseSafeDivide(BinaryOperator op, MatrixBlock rhs)
 	{
 		//if rhs is fully dense, there cannot be a /0 and hence DIV becomes sparse safe
-		// TODO: Changed for testing sparsedenseskip skip mechanic. change back
-		return(op.fn instanceof Divide && rhs.getNonZeros() >= (long) rhs.getNumRows() * rhs.getNumColumns() * 0.4);
+		return (op.fn instanceof Divide && rhs.getNonZeros()==(long)rhs.getNumRows()*rhs.getNumColumns());
 	}
 	
 	public static boolean isAllDense(MatrixBlock... mb) {
@@ -1416,8 +1398,10 @@ public class LibMatrixBincell {
 		final double[] b = db.values(0);
 		final double[] c = dc.values(0);
 		for(int i = da.pos(rl); i < da.pos(ru); i++) {
-			c[i] += op.fn.execute(a[i], b[i]);
-			lnnz += (c[i] != 0) ? 1 : 0;
+			memorySegmentRet.setAtIndex(layout, i,
+					op.fn.execute(memorySegment1.getAtIndex(layout, i), memorySegment2.getAtIndex(layout, i)) +
+							memorySegmentRet.getAtIndex(layout, i));
+			lnnz += (memorySegmentRet.getAtIndex(layout, i) != 0) ? 1 : 0;
 		}
 		return lnnz;
 	}
@@ -1654,7 +1638,8 @@ public class LibMatrixBincell {
 				int apos = a.pos(r);
 				int alen = a.size(r);
 				int[] aix = a.indexes(r);
-				double[] avals = a.values(r);
+				//double[] avals = a.values(r);
+				MemorySegment avals = memorySegments1[r];
 				
 				if( copyOnes ) { //SPECIAL CASE: e.g., (X != 0) 
 					//create sparse row without repeated resizing
@@ -1667,13 +1652,13 @@ public class LibMatrixBincell {
 					c.set(r, crow, false);
 					nnz += alen;
 				}
-				else { //GENERAL CASE
+				else { //GENERAL CASE //TODO:FFM
 					//create sparse row without repeated resizing for specific ops
 					if( allocExact )
 						c.allocate(r, alen);
-					
+
 					for(int j=apos; j<apos+alen; j++) {
-						double val = op.executeScalar(avals[j]);
+						double val = op.executeScalar(avals.getAtIndex(ValueLayout.JAVA_DOUBLE, j));
 						c.append(r, aix[j], val);
 						nnz += (val != 0) ? 1 : 0; 
 					}

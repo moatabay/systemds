@@ -48,7 +48,7 @@ public class Builtin extends ValueFunction
 	private static final long serialVersionUID = 3836744687789840574L;
 	
 	public enum BuiltinCode { AUTODIFF, SIN, COS, TAN, SINH, COSH, TANH, ASIN, ACOS, ATAN, LOG, LOG_NZ, MIN,
-		MAX, ABS, SIGN, SQRT, EXP, PLOGP, PRINT, PRINTF, NROW, NCOL, LENGTH, LINEAGE, ROUND, MAXINDEX, MININDEX,
+		MAX, ABS, SIGN, SQRT, EXP, EXP_2, PLOGP, PRINT, PRINTF, NROW, NCOL, LENGTH, LINEAGE, ROUND, MAXINDEX, MININDEX,
 		STOP, CEIL, FLOOR, CUMSUM, CUMPROD, CUMMIN, CUMMAX, CUMSUMPROD, INVERSE, SPROP, SIGMOID, EVAL, LIST,
 		TYPEOF, APPLY_SCHEMA, DETECTSCHEMA, ISNA, ISNAN, ISINF, DROP_INVALID_TYPE, 
 		DROP_INVALID_LENGTH, VALUE_SWAP, FRAME_ROW_REPLICATE,
@@ -170,6 +170,7 @@ public class Builtin extends ValueFunction
 			case SIGN:   return FASTMATH ? FastMath.signum(in) : Math.signum(in);
 			case SQRT:   return Math.sqrt(in); //faster in Math
 			case EXP:    return FASTMATH ? FastMath.exp(in) : Math.exp(in);
+			case EXP_2:  return !FASTMATH ? FastMath.exp(in) : Math.exp(in);
 			case ROUND: return Math.round(in); //no need for FastMath
 			
 			case PLOGP:

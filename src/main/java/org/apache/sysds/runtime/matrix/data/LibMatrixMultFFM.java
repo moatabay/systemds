@@ -19,14 +19,12 @@
 
 package org.apache.sysds.runtime.matrix.data;
 
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.NotImplementedException;
@@ -43,17 +41,8 @@ import org.apache.sysds.lops.WeightedUnaryMM.WUMMType;
 import org.apache.sysds.runtime.DMLRuntimeException;
 import org.apache.sysds.runtime.controlprogram.parfor.stat.InfrastructureAnalyzer;
 import org.apache.sysds.runtime.controlprogram.parfor.stat.Timing;
-import org.apache.sysds.runtime.data.DenseBlock;
-import org.apache.sysds.runtime.data.DenseBlockFP64DEDUP;
-import org.apache.sysds.runtime.data.DenseBlockFactory;
-import org.apache.sysds.runtime.data.SparseBlock;
+import org.apache.sysds.runtime.data.*;
 import org.apache.sysds.runtime.data.SparseBlock.Type;
-import org.apache.sysds.runtime.data.SparseBlockCSR;
-import org.apache.sysds.runtime.data.SparseBlockFactory;
-import org.apache.sysds.runtime.data.SparseBlockMCSR;
-import org.apache.sysds.runtime.data.SparseRow;
-import org.apache.sysds.runtime.data.SparseRowScalar;
-import org.apache.sysds.runtime.data.SparseRowVector;
 import org.apache.sysds.runtime.functionobjects.SwapIndex;
 import org.apache.sysds.runtime.functionobjects.ValueFunction;
 import org.apache.sysds.runtime.matrix.operators.ReorgOperator;
@@ -70,7 +59,7 @@ import org.apache.sysds.utils.NativeHelper;
  * for direct access, but change the final result to sparse if necessary.
  * The only exceptions are ultra-sparse matrix mult, wsloss and wsigmoid.
  */
-public class LibMatrixMult 
+public class LibMatrixMultFFM
 {
 	//internal configuration
 	private static final boolean LOW_LEVEL_OPTIMIZATION = true;
@@ -79,9 +68,11 @@ public class LibMatrixMult
 	private static final long PAR_MINFLOP_THRESHOLD2 = 128L*1024; //MIN 2 MFLOP
 	public static final int L2_CACHESIZE = 256 * 1024; //256KB (common size)
 	public static final int L3_CACHESIZE = 16 * 1024 * 1024; //16MB (common size)
-	private static final Log LOG = LogFactory.getLog(LibMatrixMult.class.getName());
+	private static final Log LOG = LogFactory.getLog(LibMatrixMultFFM.class.getName());
+	public static MemorySegment segment1, segment2, segmentRet;
+	private static final ValueLayout.OfDouble layout = ValueLayout.JAVA_DOUBLE;
 
-	private LibMatrixMult() {
+	private LibMatrixMultFFM() {
 		//prevent instantiation via private constructor
 	}
 	
@@ -243,9 +234,9 @@ public class LibMatrixMult
 		else
 			parallelMatrixMult(m1, m2, ret, k, ultraSparse, sparse, tm2, m1Perm);
 
-		System.out.println("NO-SIMD MM "+k+" ("+m1.isInSparseFormat()+","+m1.getNumRows()+","+m1.getNumColumns()+","+m1.getNonZeros()+")x" +
+		System.out.println("FFM MM "+k+" ("+m1.isInSparseFormat()+","+m1.getNumRows()+","+m1.getNumColumns()+","+m1.getNonZeros()+")x" +
 				"("+m2.isInSparseFormat()+","+m2.getNumRows()+","+m2.getNumColumns()+","+m2.getNonZeros()+") in "+time.stop());
-	
+
 		return ret;
 	}
 
@@ -267,7 +258,6 @@ public class LibMatrixMult
 		else {
 			matrixMultDenseSparse(m1, m2, ret, pm2, 0, ru2);
 		}
-
 
 		// post-processing: nnz/representation
 		if(!fixedRet) {
@@ -1240,7 +1230,7 @@ public class LibMatrixMult
 					for( int i = bi; i < bimin; i++) {
 						double[] avals = a.values(i), cvals = c.values(i);
 						int aixi = a.pos(i, bk), cixj = c.pos(i, bj);
-						
+
 						if( b.isContiguous(bk, bkmin-1) ) {
 							double[] bvals = b.values(bk);
 							int bkpos = b.pos(bk, bj);
@@ -1264,8 +1254,8 @@ public class LibMatrixMult
 						}
 						else {
 							for( int k = bk; k<bkmin; k++ ) {
-								if( avals[k] != 0 )
-									vectMultiplyAdd( avals[k], b.values(k),
+								if( segment1.getAtIndex(layout, k) != 0 )
+									vectMultiplyAdd( segment1.getAtIndex(layout, k), b.values(k),
 										cvals, b.pos(k, bj), cixj, bjlen );
 							}
 						}
@@ -1539,7 +1529,7 @@ public class LibMatrixMult
 		//output - however, in this case it's unlikely that we consume every cache line in the rhs
 		final int blocksizeI = (int) (8L*xsp);
 		final int blocksizeK = (int) (8L*xsp);
-		final int blocksizeJ = 1024;
+		final int blocksizeJ = 1024; 
 		
 		//temporary array of current sparse positions
 		int[] curk = new int[Math.min(blocksizeI, ru-rl)];
@@ -3807,7 +3797,8 @@ public class LibMatrixMult
 		
 		//rest, not aligned to 8-blocks
 		for( int j = 0; j < bn; j++, bi++, ci++)
-			c[ ci ] += aval * b[ bi ];
+			segmentRet.setAtIndex(layout, ci, aval * segment2.getAtIndex(layout, bi) +
+					segmentRet.getAtIndex(layout, ci));
 		
 		//unrolled 8-block  (for better instruction-level parallelism)
 		for( int j = bn; j < len; j+=8, bi+=8, ci+=8) 
@@ -3815,24 +3806,41 @@ public class LibMatrixMult
 			//read 64B cachelines of b and c
 			//compute c' = aval * b + c
 			//write back 64B cacheline of c = c'
-			c[ ci+0 ] += aval * b[ bi+0 ];
-			c[ ci+1 ] += aval * b[ bi+1 ];
-			c[ ci+2 ] += aval * b[ bi+2 ];
-			c[ ci+3 ] += aval * b[ bi+3 ];
-			c[ ci+4 ] += aval * b[ bi+4 ];
-			c[ ci+5 ] += aval * b[ bi+5 ];
-			c[ ci+6 ] += aval * b[ bi+6 ];
-			c[ ci+7 ] += aval * b[ bi+7 ];
+			segmentRet.setAtIndex(layout, ci+0, aval * segment2.getAtIndex(layout, bi+0) +
+					segmentRet.getAtIndex(layout, ci+0));
+
+			segmentRet.setAtIndex(layout, ci+1, aval * segment2.getAtIndex(layout, bi+1) +
+					segmentRet.getAtIndex(layout, ci+1));
+
+			segmentRet.setAtIndex(layout, ci+2, aval * segment2.getAtIndex(layout, bi+2) +
+					segmentRet.getAtIndex(layout, ci+2));
+
+			segmentRet.setAtIndex(layout, ci+3, aval * segment2.getAtIndex(layout, bi+3) +
+					segmentRet.getAtIndex(layout, ci+3));
+
+			segmentRet.setAtIndex(layout, ci+4, aval * segment2.getAtIndex(layout, bi+4) +
+					segmentRet.getAtIndex(layout, ci+4));
+
+			segmentRet.setAtIndex(layout, ci+5, aval * segment2.getAtIndex(layout, bi+5) +
+					segmentRet.getAtIndex(layout, ci+5));
+
+			segmentRet.setAtIndex(layout, ci+6, aval * segment2.getAtIndex(layout, bi+6) +
+					segmentRet.getAtIndex(layout, ci+6));
+
+			segmentRet.setAtIndex(layout, ci+7, aval * segment2.getAtIndex(layout, bi+7) +
+					segmentRet.getAtIndex(layout, ci+7));
 		}
 	}
 
 	private static void vectMultiplyAdd2( final double aval1, final double aval2, double[] b, double[] c, int bi1, int bi2, int ci, final int len )
 	{
-		final int bn = len%8;	
+		final int bn = len%8;
 		
 		//rest, not aligned to 8-blocks
 		for( int j = 0; j < bn; j++, bi1++, bi2++, ci++ )
-			c[ ci ] += aval1 * b[ bi1 ] + aval2 * b[ bi2 ];
+			segmentRet.setAtIndex(layout, ci, aval1 * segment2.getAtIndex(layout, bi1) +
+					aval2 * segment2.getAtIndex(layout, bi2) +
+					segmentRet.getAtIndex(layout, ci));
 		
 		//unrolled 8-block  (for better instruction-level parallelism)
 		for( int j = bn; j < len; j+=8, bi1+=8, bi2+=8, ci+=8 ) 
@@ -3840,24 +3848,50 @@ public class LibMatrixMult
 			//read 64B cachelines of b (2x) and c
 			//compute c' = aval_1 * b_1 + aval_2 * b_2 + c
 			//write back 64B cacheline of c = c'
-			c[ ci+0 ] += aval1 * b[ bi1+0 ] + aval2 * b[ bi2+0 ];
-			c[ ci+1 ] += aval1 * b[ bi1+1 ] + aval2 * b[ bi2+1 ];
-			c[ ci+2 ] += aval1 * b[ bi1+2 ] + aval2 * b[ bi2+2 ];
-			c[ ci+3 ] += aval1 * b[ bi1+3 ] + aval2 * b[ bi2+3 ];
-			c[ ci+4 ] += aval1 * b[ bi1+4 ] + aval2 * b[ bi2+4 ];
-			c[ ci+5 ] += aval1 * b[ bi1+5 ] + aval2 * b[ bi2+5 ];
-			c[ ci+6 ] += aval1 * b[ bi1+6 ] + aval2 * b[ bi2+6 ];
-			c[ ci+7 ] += aval1 * b[ bi1+7 ] + aval2 * b[ bi2+7 ];	
+			segmentRet.setAtIndex(layout, ci+0, aval1 * segment2.getAtIndex(layout, bi1+0) +
+					aval2 * segment2.getAtIndex(layout, bi2+0) +
+					segmentRet.getAtIndex(layout, ci+0));
+
+			segmentRet.setAtIndex(layout, ci+1, aval1 * segment2.getAtIndex(layout, bi1+1) +
+					aval2 * segment2.getAtIndex(layout, bi2+1) +
+					segmentRet.getAtIndex(layout, ci+1));
+
+			segmentRet.setAtIndex(layout, ci+2, aval1 * segment2.getAtIndex(layout, bi1+2) +
+					aval2 * segment2.getAtIndex(layout, bi2+2) +
+					segmentRet.getAtIndex(layout, ci+2));
+
+			segmentRet.setAtIndex(layout, ci+3, aval1 * segment2.getAtIndex(layout, bi1+3) +
+					aval2 * segment2.getAtIndex(layout, bi2+3) +
+					segmentRet.getAtIndex(layout, ci+3));
+
+			segmentRet.setAtIndex(layout, ci+4, aval1 * segment2.getAtIndex(layout, bi1+4) +
+					aval2 * segment2.getAtIndex(layout, bi2+4) +
+					segmentRet.getAtIndex(layout, ci+4));
+
+			segmentRet.setAtIndex(layout, ci+5, aval1 * segment2.getAtIndex(layout, bi1+5) +
+					aval2 * segment2.getAtIndex(layout, bi2+5) +
+					segmentRet.getAtIndex(layout, ci+5));
+
+			segmentRet.setAtIndex(layout, ci+6, aval1 * segment2.getAtIndex(layout, bi1+6) +
+					aval2 * segment2.getAtIndex(layout, bi2+6) +
+					segmentRet.getAtIndex(layout, ci+6));
+
+			segmentRet.setAtIndex(layout, ci+7, aval1 * segment2.getAtIndex(layout, bi1+7) +
+					aval2 * segment2.getAtIndex(layout, bi2+7) +
+					segmentRet.getAtIndex(layout, ci+7));
 		}
 	}
 
 	private static void vectMultiplyAdd3( final double aval1, final double aval2, final double aval3, double[] b, double[] c, int bi1, int bi2, int bi3, int ci, final int len )
 	{
-		final int bn = len%8;	
+		final int bn = len%8;
 		
 		//rest, not aligned to 8-blocks
 		for( int j = 0; j < bn; j++, bi1++, bi2++, bi3++, ci++ )
-			c[ ci ] += aval1 * b[ bi1 ] + aval2 * b[ bi2 ] + aval3 * b[ bi3 ];
+			segmentRet.setAtIndex(layout, ci, aval1 * segment2.getAtIndex(layout, bi1) +
+					aval2 * segment2.getAtIndex(layout, bi2) +
+					aval3 * segment2.getAtIndex(layout, bi3) +
+					segmentRet.getAtIndex(layout, ci));
 		
 		//unrolled 8-block (for better instruction-level parallelism)
 		for( int j = bn; j < len; j+=8, bi1+=8, bi2+=8, bi3+=8, ci+=8 ) 
@@ -3865,24 +3899,59 @@ public class LibMatrixMult
 			//read 64B cachelines of b (3x) and c
 			//compute c' = aval_1 * b_1 + aval_2 * b_2 + c
 			//write back 64B cacheline of c = c'
-			c[ ci+0 ] += aval1 * b[ bi1+0 ] + aval2 * b[ bi2+0 ] + aval3 * b[ bi3+0 ];
-			c[ ci+1 ] += aval1 * b[ bi1+1 ] + aval2 * b[ bi2+1 ] + aval3 * b[ bi3+1 ];
-			c[ ci+2 ] += aval1 * b[ bi1+2 ] + aval2 * b[ bi2+2 ] + aval3 * b[ bi3+2 ];
-			c[ ci+3 ] += aval1 * b[ bi1+3 ] + aval2 * b[ bi2+3 ] + aval3 * b[ bi3+3 ];
-			c[ ci+4 ] += aval1 * b[ bi1+4 ] + aval2 * b[ bi2+4 ] + aval3 * b[ bi3+4 ];
-			c[ ci+5 ] += aval1 * b[ bi1+5 ] + aval2 * b[ bi2+5 ] + aval3 * b[ bi3+5 ];
-			c[ ci+6 ] += aval1 * b[ bi1+6 ] + aval2 * b[ bi2+6 ] + aval3 * b[ bi3+6 ];
-			c[ ci+7 ] += aval1 * b[ bi1+7 ] + aval2 * b[ bi2+7 ] + aval3 * b[ bi3+7 ];	
+			segmentRet.setAtIndex(layout, ci+0, aval1 * segment2.getAtIndex(layout, bi1+0) +
+					aval2 * segment2.getAtIndex(layout, bi2+0) +
+					aval3 * segment2.getAtIndex(layout, bi3+0) +
+					segmentRet.getAtIndex(layout, ci+0));
+
+			segmentRet.setAtIndex(layout, ci+1, aval1 * segment2.getAtIndex(layout, bi1+1) +
+					aval2 * segment2.getAtIndex(layout, bi2+1) +
+					aval3 * segment2.getAtIndex(layout, bi3+1) +
+					segmentRet.getAtIndex(layout, ci+1));
+
+			segmentRet.setAtIndex(layout, ci+2, aval1 * segment2.getAtIndex(layout, bi1+2) +
+					aval2 * segment2.getAtIndex(layout, bi2+2) +
+					aval3 * segment2.getAtIndex(layout, bi3+2) +
+					segmentRet.getAtIndex(layout, ci+2));
+
+			segmentRet.setAtIndex(layout, ci+3, aval1 * segment2.getAtIndex(layout, bi1+3) +
+					aval2 * segment2.getAtIndex(layout, bi2+3) +
+					aval3 * segment2.getAtIndex(layout, bi3+3) +
+					segmentRet.getAtIndex(layout, ci+3));
+
+			segmentRet.setAtIndex(layout, ci+4, aval1 * segment2.getAtIndex(layout, bi1+4) +
+					aval2 * segment2.getAtIndex(layout, bi2+4) +
+					aval3 * segment2.getAtIndex(layout, bi3+4) +
+					segmentRet.getAtIndex(layout, ci+4));
+
+			segmentRet.setAtIndex(layout, ci+5, aval1 * segment2.getAtIndex(layout, bi1+5) +
+					aval2 * segment2.getAtIndex(layout, bi2+5) +
+					aval3 * segment2.getAtIndex(layout, bi3+5) +
+					segmentRet.getAtIndex(layout, ci+5));
+
+			segmentRet.setAtIndex(layout, ci+6, aval1 * segment2.getAtIndex(layout, bi1+6) +
+					aval2 * segment2.getAtIndex(layout, bi2+6) +
+					aval3 * segment2.getAtIndex(layout, bi3+6) +
+					segmentRet.getAtIndex(layout, ci+6));
+
+			segmentRet.setAtIndex(layout, ci+7, aval1 * segment2.getAtIndex(layout, bi1+7) +
+					aval2 * segment2.getAtIndex(layout, bi2+7) +
+					aval3 * segment2.getAtIndex(layout, bi3+7) +
+					segmentRet.getAtIndex(layout, ci+7));
 		}
 	}
 
 	private static void vectMultiplyAdd4( final double aval1, final double aval2, final double aval3, final double aval4, double[] b, double[] c, int bi1, int bi2, int bi3, int bi4, int ci, final int len )
 	{
-		final int bn = len%8;	
+		final int bn = len%8;
 		
 		//rest, not aligned to 8-blocks
 		for( int j = 0; j < bn; j++, bi1++, bi2++, bi3++, bi4++, ci++ )
-			c[ ci ] += aval1 * b[ bi1 ] + aval2 * b[ bi2 ] + aval3 * b[ bi3 ] + aval4 * b[ bi4 ];
+			segmentRet.setAtIndex(layout, ci, aval1 * segment2.getAtIndex(layout, bi1) +
+					aval2 * segment2.getAtIndex(layout, bi2) +
+					aval3 * segment2.getAtIndex(layout, bi3) +
+					aval4 * segment2.getAtIndex(layout, bi4) +
+					segmentRet.getAtIndex(layout, ci));
 		
 		//unrolled 8-block  (for better instruction-level parallelism)
 		for( int j = bn; j < len; j+=8, bi1+=8, bi2+=8, bi3+=8, bi4+=8, ci+=8) 
@@ -3890,14 +3959,53 @@ public class LibMatrixMult
 			//read 64B cachelines of b (4x) and c 
 			//compute c' = aval_1 * b_1 + aval_2 * b_2 + c
 			//write back 64B cacheline of c = c'
-			c[ ci+0 ] += aval1 * b[ bi1+0 ] + aval2 * b[ bi2+0 ] + aval3 * b[ bi3+0 ] + aval4 * b[ bi4+0 ];
-			c[ ci+1 ] += aval1 * b[ bi1+1 ] + aval2 * b[ bi2+1 ] + aval3 * b[ bi3+1 ] + aval4 * b[ bi4+1 ];
-			c[ ci+2 ] += aval1 * b[ bi1+2 ] + aval2 * b[ bi2+2 ] + aval3 * b[ bi3+2 ] + aval4 * b[ bi4+2 ];
-			c[ ci+3 ] += aval1 * b[ bi1+3 ] + aval2 * b[ bi2+3 ] + aval3 * b[ bi3+3 ] + aval4 * b[ bi4+3 ];
-			c[ ci+4 ] += aval1 * b[ bi1+4 ] + aval2 * b[ bi2+4 ] + aval3 * b[ bi3+4 ] + aval4 * b[ bi4+4 ];
-			c[ ci+5 ] += aval1 * b[ bi1+5 ] + aval2 * b[ bi2+5 ] + aval3 * b[ bi3+5 ] + aval4 * b[ bi4+5 ];
-			c[ ci+6 ] += aval1 * b[ bi1+6 ] + aval2 * b[ bi2+6 ] + aval3 * b[ bi3+6 ] + aval4 * b[ bi4+6 ];
-			c[ ci+7 ] += aval1 * b[ bi1+7 ] + aval2 * b[ bi2+7 ] + aval3 * b[ bi3+7 ] + aval4 * b[ bi4+7 ];	
+			segmentRet.setAtIndex(layout, ci+0, aval1 * segment2.getAtIndex(layout, bi1+0) +
+					aval2 * segment2.getAtIndex(layout, bi2+0) +
+					aval3 * segment2.getAtIndex(layout, bi3+0) +
+					aval4 * segment2.getAtIndex(layout, bi4+0) +
+					segmentRet.getAtIndex(layout, ci+0));
+
+			segmentRet.setAtIndex(layout, ci+1, aval1 * segment2.getAtIndex(layout, bi1+1) +
+					aval2 * segment2.getAtIndex(layout, bi2+1) +
+					aval3 * segment2.getAtIndex(layout, bi3+1) +
+					aval4 * segment2.getAtIndex(layout, bi4+1) +
+					segmentRet.getAtIndex(layout, ci+1));
+
+			segmentRet.setAtIndex(layout, ci+2, aval1 * segment2.getAtIndex(layout, bi1+2) +
+					aval2 * segment2.getAtIndex(layout, bi2+2) +
+					aval3 * segment2.getAtIndex(layout, bi3+2) +
+					aval4 * segment2.getAtIndex(layout, bi4+2) +
+					segmentRet.getAtIndex(layout, ci+2));
+
+			segmentRet.setAtIndex(layout, ci+3, aval1 * segment2.getAtIndex(layout, bi1+3) +
+					aval2 * segment2.getAtIndex(layout, bi2+3) +
+					aval3 * segment2.getAtIndex(layout, bi3+3) +
+					aval4 * segment2.getAtIndex(layout, bi4+3) +
+					segmentRet.getAtIndex(layout, ci+3));
+
+			segmentRet.setAtIndex(layout, ci+4, aval1 * segment2.getAtIndex(layout, bi1+4) +
+					aval2 * segment2.getAtIndex(layout, bi2+4) +
+					aval3 * segment2.getAtIndex(layout, bi3+4) +
+					aval4 * segment2.getAtIndex(layout, bi4+4) +
+					segmentRet.getAtIndex(layout, ci+4));
+
+			segmentRet.setAtIndex(layout, ci+5, aval1 * segment2.getAtIndex(layout, bi1+5) +
+					aval2 * segment2.getAtIndex(layout, bi2+5) +
+					aval3 * segment2.getAtIndex(layout, bi3+5) +
+					aval4 * segment2.getAtIndex(layout, bi4+5) +
+					segmentRet.getAtIndex(layout, ci+5));
+
+			segmentRet.setAtIndex(layout, ci+6, aval1 * segment2.getAtIndex(layout, bi1+6) +
+					aval2 * segment2.getAtIndex(layout, bi2+6) +
+					aval3 * segment2.getAtIndex(layout, bi3+6) +
+					aval4 * segment2.getAtIndex(layout, bi4+6) +
+					segmentRet.getAtIndex(layout, ci+6));
+
+			segmentRet.setAtIndex(layout, ci+7, aval1 * segment2.getAtIndex(layout, bi1+7) +
+					aval2 * segment2.getAtIndex(layout, bi2+7) +
+					aval3 * segment2.getAtIndex(layout, bi3+7) +
+					aval4 * segment2.getAtIndex(layout, bi4+7) +
+					segmentRet.getAtIndex(layout, ci+7));
 		}
 	}
 	
@@ -4588,8 +4696,8 @@ public class LibMatrixMult
 	private static int copyNonZeroElements( double[] a, final int aixi, final int bixk, final int n, double[] tmpa, int[] tmpbi, final int bklen ) {
 		int knnz = 0;
 		for( int k = 0; k < bklen; k++ )
-			if( a[ aixi+k ] != 0 ) {
-				tmpa[ knnz ] = a[ aixi+k ];
+			if( segment1.getAtIndex(layout, aixi+k) != 0 ) {
+				tmpa[ knnz ] = segment1.getAtIndex(layout, aixi+k);
 				tmpbi[ knnz ] = bixk + k*n;
 				knnz ++;
 			}

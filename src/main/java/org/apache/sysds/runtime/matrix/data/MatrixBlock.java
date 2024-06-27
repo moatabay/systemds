@@ -3019,6 +3019,75 @@ public class MatrixBlock extends MatrixValue implements CacheBlock<MatrixBlock>,
 		return ret;
 	}
 
+	public MatrixBlock scalarOperationsSIMD(ScalarOperator op, MatrixValue result) {
+		MatrixBlock ret = checkType(result);
+
+		// estimate the sparsity structure of result matrix
+		boolean sp = this.sparse; // by default, we guess result.sparsity=input.sparsity
+		if (!op.sparseSafe)
+			sp = false; // if the operation is not sparse safe, then result will be in dense format
+
+		//allocate the output matrix block
+		if( ret==null )
+			ret = new MatrixBlock(rlen, clen, sp, this.nonZeros);
+		else
+			ret.reset(rlen, clen, sp, this.nonZeros);
+
+		//core scalar operations
+		if( op.getNumThreads() > 1 )
+			LibMatrixBincellSIMD.bincellOp(this, ret, op, op.getNumThreads());
+		else
+			LibMatrixBincellSIMD.bincellOp(this, ret, op);
+
+		return ret;
+	}
+
+	public MatrixBlock scalarOperationsSIMD256(ScalarOperator op, MatrixValue result) {
+		MatrixBlock ret = checkType(result);
+
+		// estimate the sparsity structure of result matrix
+		boolean sp = this.sparse; // by default, we guess result.sparsity=input.sparsity
+		if (!op.sparseSafe)
+			sp = false; // if the operation is not sparse safe, then result will be in dense format
+
+		//allocate the output matrix block
+		if( ret==null )
+			ret = new MatrixBlock(rlen, clen, sp, this.nonZeros);
+		else
+			ret.reset(rlen, clen, sp, this.nonZeros);
+
+		//core scalar operations
+		if( op.getNumThreads() > 1 )
+			LibMatrixBincellSIMD256.bincellOp(this, ret, op, op.getNumThreads());
+		else
+			LibMatrixBincellSIMD256.bincellOp(this, ret, op);
+
+		return ret;
+	}
+
+	public MatrixBlock scalarOperationsFFM(ScalarOperator op, MatrixValue result) {
+		MatrixBlock ret = checkType(result);
+
+		// estimate the sparsity structure of result matrix
+		boolean sp = this.sparse; // by default, we guess result.sparsity=input.sparsity
+		if (!op.sparseSafe)
+			sp = false; // if the operation is not sparse safe, then result will be in dense format
+
+		//allocate the output matrix block
+		if( ret==null )
+			ret = new MatrixBlock(rlen, clen, sp, this.nonZeros);
+		else
+			ret.reset(rlen, clen, sp, this.nonZeros);
+
+		//core scalar operations
+		if( op.getNumThreads() > 1 )
+			LibMatrixBincellFFM.bincellOp(this, ret, op, op.getNumThreads());
+		else
+			LibMatrixBincellFFM.bincellOp(this, ret, op);
+
+		return ret;
+	}
+
 	public final MatrixBlock unaryOperations(UnaryOperator op){
 		return unaryOperations(op, null);
 	}
@@ -3060,6 +3129,45 @@ public class MatrixBlock extends MatrixValue implements CacheBlock<MatrixBlock>,
 		if( ret.isEmptyBlock(false) )
 			ret.examSparsity();
 		
+		return ret;
+	}
+
+	public MatrixBlock unaryOperationsSIMD(UnaryOperator op, MatrixValue result) {
+		MatrixBlock ret = checkType(result);
+		// estimate the sparsity structure of result matrix
+		// by default, we guess result.sparsity=input.sparsity, unless not sparse safe
+		boolean sp = this.sparse && op.sparseSafe;
+
+		//early abort for comparisons w/ special values
+		if( Builtin.isBuiltinCode(op.fn, BuiltinCode.ISNAN, BuiltinCode.ISNA))
+			if( !containsValue(op.getPattern(), op.getNumThreads()) ) {
+				return new MatrixBlock(rlen, clen, true); //avoid unnecessary allocation
+			}
+
+		//allocate output
+		int n = Builtin.isBuiltinCode(op.fn, BuiltinCode.CUMSUMPROD) ? 1 : clen;
+		if( ret == null )
+			ret = new MatrixBlock(rlen, n, sp, sp ? nonZeros : rlen*n);
+		else
+			ret.reset(rlen, n, sp);
+
+		//core execute
+		if( LibMatrixAgg.isSupportedUnaryOperator(op) ) {
+			//e.g., cumsum/cumprod/cummin/cumax/cumsumprod
+			if( op.getNumThreads() > 1 )
+				ret = LibMatrixAgg.cumaggregateUnaryMatrix(this, ret, op, op.getNumThreads());
+			else
+				ret = LibMatrixAgg.cumaggregateUnaryMatrix(this, ret, op);
+		}
+		else {
+			ret = LibMatrixBincellSIMD.uncellOp(this, ret, op);
+		}
+
+		//ensure empty results sparse representation
+		//(no additional memory requirements)
+		if( ret.isEmptyBlock(false) )
+			ret.examSparsity();
+
 		return ret;
 	}
 

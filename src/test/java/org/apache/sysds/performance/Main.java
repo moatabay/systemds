@@ -30,14 +30,14 @@ import org.apache.sysds.performance.generators.FrameTransformFile;
 import org.apache.sysds.performance.generators.GenMatrices;
 import org.apache.sysds.performance.generators.IGenerate;
 import org.apache.sysds.performance.generators.MatrixFile;
-import org.apache.sysds.performance.matrix.MatrixMulPerformance;
-import org.apache.sysds.performance.matrix.MatrixStorage;
-import org.apache.sysds.performance.matrix.SparseAppend;
+import org.apache.sysds.performance.matrix.*;
 import org.apache.sysds.runtime.data.SparseBlock;
 import org.apache.sysds.runtime.frame.data.FrameBlock;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
 import org.apache.sysds.runtime.util.CommonThreadPool;
 import org.apache.sysds.test.TestUtils;
+
+import static org.apache.sysds.performance.matrix.SIMDPerformance.*;
 
 public class Main {
 
@@ -118,6 +118,60 @@ public class Main {
 				break;
 			case 1004:
 				run1004(args);
+				break;
+			case 2000:
+				run2000(args);
+				break;
+			case 2001:
+				run2001(args);
+				break;
+			case 2002:
+				run2002(args);
+				break;
+			case 2003:
+				run2003(args);
+				break;
+			case 2004:
+				run2004(args);
+				break;
+			case 2005:
+				run2005(args);
+				break;
+			case 2006:
+				run2006(args);
+				break;
+			case 2007:
+				run2007(args);
+				break;
+			case 2010:
+				run2010(args);
+				break;
+			case 2011:
+				run2011(args);
+				break;
+			case 2012:
+				run2012(args);
+				break;
+			case 2013:
+				run2013(args);
+				break;
+			case 2014:
+				run2014(args);
+				break;
+			case 2015:
+				run2015(args);
+				break;
+			case 2016:
+				run2016(args);
+				break;
+			case 2017:
+				run2017(args);
+				break;
+			case 2018:
+				run2018(args);
+				break;
+			case 2019:
+				run2019(args);
 				break;
 			default:
 				break;
@@ -326,6 +380,141 @@ public class Main {
 	private static void run1004(String[] args){
 		new SparseAppend(args);
 	}
+
+	// ########
+	// # SIMD #
+	// ########
+
+	private static void run2000(String[] args) {
+		// Matrix mult:
+		// java -jar --add-modules jdk.incubator.vector ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2000 0.8 0.8 2000 2000 2000 1 20 ./conf/SystemDS-config-defaults.xml
+		double sparsity1 = Double.parseDouble(args[1]);
+		double sparsity2 = Double.parseDouble(args[2]);
+		String rows1 = args[3];
+		String cols1 = args[4];
+		String cols2 = args[5];
+		int k = Integer.parseInt(args[6]);
+		int warmupIterations = Integer.parseInt(args[7]);
+		String dmlPath = args[8];
+
+		try {
+			matrixMultTest(sparsity1, sparsity2, rows1, cols1, cols2, k, warmupIterations, dmlPath);
+		} catch (NumberFormatException e) {
+			e.printStackTrace();
+		}
+	}
+
+
+	private static void run2001(String[] args) {
+		// Matrix Div:
+		// java -jar --add-modules jdk.incubator.vector ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2001 0.8 0.8 0.8 2000 2000 2 1 20
+		double sparsity1 = Double.parseDouble(args[1]);
+		double sparsity2 = Double.parseDouble(args[2]);
+		double sparsity3 = Double.parseDouble(args[3]);
+		String rows1 = args[4];
+		String cols1 = args[5];
+		int mode = Integer.parseInt(args[6]); // 0 == matrix-matrix, 1 == matrix-row vector, 2 == matrix-col vector
+		int k = Integer.parseInt(args[7]);
+		int warmupRuns = Integer.parseInt(args[8]);
+
+		// SIMDPerformance.matrixDivTest(denseSp,denseSp,denseSp,"5000","10000-70000#10000",2,k,15);
+		matrixDivTest(sparsity1, sparsity2, sparsity3, rows1, cols1, mode, k, warmupRuns);
+	}
+
+	private static void run2002(String[] args) {
+		// Matrix Power test
+		// java -jar --add-modules jdk.incubator.vector ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2002 0.8 2000 2000 2.5 1 20
+		double sparsity = Double.parseDouble(args[1]);
+		String rows = args[2];
+		String cols = args[3];
+		double exponent = Double.parseDouble(args[4]);
+		int k = Integer.parseInt(args[5]);
+		int warmupRuns = Integer.parseInt(args[6]);
+
+		if(args.length == 8) {
+			matrixPowerTest(sparsity, rows, cols, exponent, k, warmupRuns, Boolean.parseBoolean(args[7]));
+		} else {
+			matrixPowerTest(sparsity, rows, cols, exponent, k, warmupRuns, false);
+		}
+
+	}
+
+	private static void run2003(String[] args) {
+		// Matrix Exp test
+		// java -jar --add-modules jdk.incubator.vector ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2003 0.8 2000 2000 1 20
+		double sparsity = Double.parseDouble(args[1]);
+		String rows = args[2];
+		String cols = args[3];
+		int k = Integer.parseInt(args[4]);
+		int warmupRuns = Integer.parseInt(args[5]);
+
+		matrixExpTest(sparsity, rows, cols, k, warmupRuns);
+	}
+
+	// ###########
+	// # FFM-API #
+	// ###########
+	private static void run2004(String[] args) {
+		// Microbenchmark
+		// java -jar --enable-preview ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2004 2000 2000 20
+		FFMPerformance.testMicrobenchmark(args[1], args[2], Integer.parseInt(args[3]));
+	}
+
+	private static void run2005(String[] args) {
+		// FFM vs JNI -> MKL
+		// java -jar --enable-preview ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2005 2000 2000 2000 1 20 ./conf/SystemDS-config-defaults.xml
+		FFMPerformance.testNativeInvocation(args[1],
+				args[2],
+				args[3],
+				Integer.parseInt(args[4]),
+				Integer.parseInt(args[5]),
+				args[6]);
+	}
+
+	private static void run2006(String[] args) {
+		// FFM in Dense Dense MM Mult
+		// java -jar --add-modules jdk.incubator.vector --enable-preview ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2006 2000 2000 2000 1 20 ./conf/SystemDS-config-defaults.xml
+		FFMPerformance.testMemoryAccessMult(args[1], args[2], args[3], Integer.parseInt(args[4]), Integer.parseInt(args[5]), args[6]);
+	}
+
+	private static void run2007(String[] args) {
+		// FFM in Sparse Power
+		// java -jar --add-modules jdk.incubator.vector --enable-preview ./target/systemds-3.3.0-SNAPSHOT-perf.jar 2007 0.2 2000 2000 2.5 1 20
+		double[] sparsitiesLinear = {0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35};
+		FFMPerformance.testMemoryAccessPower(sparsitiesLinear, Integer.parseInt(args[1]), Integer.parseInt(args[2]), Double.parseDouble(args[3]),
+				Integer.parseInt(args[4]), Integer.parseInt(args[5]));
+	}
+
+	// ##############################
+	// # GIGA - PERFORMANCE - TESTS #
+	// ##############################
+
+	// Tests for Matrix Mult
+	private static void run2010(String[] args) {
+		SIMDAndFFMPerformance.runAllDense(args[1]);
+	}
+
+	private static void run2011(String[] args) {
+		SIMDAndFFMPerformance.runAllSparse(args[1]);
+	}
+
+	private static void run2012(String[] args) {
+		SIMDAndFFMPerformance.runFFMTests(args[1]);
+	}
+
+	private static void run2013(String[] args) { SIMDAndFFMPerformance.runAll(args[1]); }
+
+	private static void run2014(String[] args) { SIMDAndFFMPerformance.sparseExpSingle(); }
+
+	private static void run2015(String[] args) { SIMDAndFFMPerformance.sparseExpMulti(); }
+
+	private static void run2016(String[] args) { SIMDAndFFMPerformance.sparseDenseSkipSingle(); }
+
+	private static void run2017(String[] args) { SIMDAndFFMPerformance.sparseDenseSkipMulti(); }
+
+	private static void run2018(String[] args) { SIMDAndFFMPerformance.sparsePowerMultiExponentFloat(); }
+
+	private static void run2019(String[] args) { SIMDAndFFMPerformance.sparsePowerMultiExponentInt(); }
 
 	public static void main(String[] args) {
 		try {

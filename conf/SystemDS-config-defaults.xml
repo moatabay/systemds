@@ -18,4 +18,7 @@
 -->
 
 <root>
+    <sysds.native.blas>mkl</sysds.native.blas>
+    <!--<sysds.native.blas.directory>/home/mo/IdeaProjects/systemds/src/main/cpp/lib/</sysds.native.blas.directory>-->
+    <sysds.native.blas.directory>none</sysds.native.blas.directory>
 </root>

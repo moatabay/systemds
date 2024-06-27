@@ -431,6 +431,7 @@ public class SparseBlockDCSR extends SparseBlock
 
 		incrRowPtr(rowIndex+1, newRowSize-oldRowSize);
 		insertCols(pos, row.indexes(), row.values(), oldRowSize);
+		
 	}
 
 	@Override

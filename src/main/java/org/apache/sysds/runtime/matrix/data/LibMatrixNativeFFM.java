@@ -18,6 +18,8 @@
  */
 package org.apache.sysds.runtime.matrix.data;
 
+import java.lang.foreign.*;
+import java.lang.invoke.MethodHandle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -35,10 +37,31 @@ import org.apache.sysds.runtime.data.DenseBlockFactory;
 import org.apache.sysds.utils.NativeHelper;
 import org.apache.sysds.utils.stats.NativeStatistics;
 
-public class LibMatrixNative
+public class LibMatrixNativeFFM
 {
-	private static final Log LOG = LogFactory.getLog(LibMatrixNative.class.getName());
-	
+	private static final Log LOG = LogFactory.getLog(LibMatrixNativeFFM.class.getName());
+
+	public static Arena arena;
+	public static MemorySegment m1Segment, m2Segment, retSegment;
+	public static Linker linker = Linker.nativeLinker();
+	public static SymbolLookup symbolLookup = SymbolLookup.loaderLookup();
+	public static FunctionDescriptor dmatmultDescriptor =
+			FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, // m1Ptr
+										ValueLayout.ADDRESS, // m2Ptr
+										ValueLayout.ADDRESS, // retPtr
+										ValueLayout.JAVA_INT, // m1 rlen
+										ValueLayout.JAVA_INT, // m1 clen
+										ValueLayout.JAVA_INT, // m2 clen
+										ValueLayout.JAVA_INT); // k
+
+	// active == true -> open arena. active == false -> close arena
+	public static void controlArena(boolean active) {
+		if(active)
+			arena = Arena.ofConfined();
+		else
+			arena.close();
+	}
+
 	// ThreadLocal reuse of direct buffers for inputs/outputs (extended on demand).
 	//   note: since we anyway have to convert from double to float, we use
 	//   preallocated direct buffers (with thread-local reuse and resizing on demand)
@@ -67,7 +90,6 @@ public class LibMatrixNative
 	 * @return the ret matrixBlock if allocated otherwise a new matrixBlock.
 	 */
 	public static MatrixBlock matrixMult(MatrixBlock m1, MatrixBlock m2, MatrixBlock ret, int k) {
-
 		if(NativeHelper.isNativeLibraryLoaded()){
 			// Sanity check:
 			k = k <= 0 ? NativeHelper.getMaxNumThreads() : k;
@@ -81,9 +103,9 @@ public class LibMatrixNative
 				&& (m1.getDenseBlock().isContiguous() || !isSinglePrecision())
 				&& m2.getDenseBlock().isContiguous() //contiguous but not allocated
 				&& 8L * ret.getLength() < Integer.MAX_VALUE;
-
-			//if( isValidForNative )
-			//{
+	
+			if( isValidForNative ) 
+			{
 				// allocate output
 				if(ret == null)
 					ret = new MatrixBlock(m1.rlen, m2.clen, false);
@@ -104,19 +126,34 @@ public class LibMatrixNative
 				else {
 					DenseBlock a = m1.getDenseBlock();
 					if( a.isContiguous() ) {
-						nnz = NativeHelper.dmmdd(m1.getDenseBlockValues(), m2.getDenseBlockValues(),
-							ret.getDenseBlockValues(), m1.rlen, m1.clen, m2.clen, k);
+						int len = m1.rlen * m2.clen;
+
+						// Look for dmatmult function
+						MethodHandle methodHandle = linker
+							.downcallHandle(symbolLookup.find("_Z8dmatmultPdS_S_iiii").get(), dmatmultDescriptor);
+
+						// Invoke native function
+						try {
+							methodHandle.invokeExact(m1Segment, m2Segment, retSegment, m1.rlen, m1.clen, m2.clen, k);
+						}
+						catch(Throwable e) {
+							throw new RuntimeException(e);
+						}
+						// Write values back into ret MatrixBlock and count nnz
+						double[] tmp = ret.getDenseBlockValues();
+						for(int i = 0; i < len; i++)
+							nnz += (tmp[i] = retSegment.getAtIndex(ValueLayout.JAVA_DOUBLE, i)) != 0 ? 1 : 0;
 					}
 					else {
-						//sequential processing of individual blocks to 
+						//sequential processing of individual blocks to
 						//avoid segementation faults with concurrent multi-threaded BLAS calls
 						for(int bix = 0; bix < a.numBlocks(); bix++) {
 							double[] tmp = new double[a.blockSize(bix)*m2.clen];
 							nnz += NativeHelper.dmmdd(a.valuesAt(bix), m2.getDenseBlockValues(),
-								tmp, a.blockSize(bix), m1.clen, m2.clen, k);
+									tmp, a.blockSize(bix), m1.clen, m2.clen, k);
 							int rl = bix * a.blockSize();
 							ret.getDenseBlock().set(rl, rl+a.blockSize(bix), 0, m2.clen,
-								DenseBlockFactory.createDenseBlock(tmp, new int[]{a.blockSize(bix),m2.clen}));
+									DenseBlockFactory.createDenseBlock(tmp, new int[]{a.blockSize(bix),m2.clen}));
 						}
 					}
 				}
@@ -135,7 +172,7 @@ public class LibMatrixNative
 				LOG.warn("matrixMult: Native mat mult failed. Falling back to java version ("
 					+ "loaded=" + NativeHelper.isNativeLibraryLoaded()
 					+ ", sparse=" + (m1.isInSparseFormat() | m2.isInSparseFormat()) + ")");
-			//}
+			}
 		}
 		else
 			LOG.warn("Was valid for native MM but native lib was not loaded");
