@@ -65,7 +65,7 @@
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 		<maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
 		<!-- Set java compile level via argument, ex: 1.8 1.9 10 11-->
-		<java.level>11</java.level>
+		<java.level>17</java.level>
 		<java.version>{java.level}</java.version>
 		<!-->Testing settings<!-->
 		<maven.test.skip>false</maven.test.skip>
@@ -341,6 +341,7 @@
 					<!-- <reportFormat>brief</reportFormat> -->
 					<trimStackTrace>true</trimStackTrace>
 					<rerunFailingTestsCount>${rerun.failing.tests.count}</rerunFailingTestsCount>
+					<argLine>--add-modules=jdk.incubator.vector</argLine>
 					<systemPropertyVariables>
 						<log4j.configurationFile>file:src/test/resources/log4j.properties</log4j.configurationFile>
 					</systemPropertyVariables>
