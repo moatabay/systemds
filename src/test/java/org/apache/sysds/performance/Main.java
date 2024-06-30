@@ -39,6 +39,12 @@ import org.apache.sysds.runtime.matrix.data.MatrixBlock;
 import org.apache.sysds.runtime.util.CommonThreadPool;
 import org.apache.sysds.test.TestUtils;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.apache.sysds.performance.matrix.MatrixMulSIMDPerformance.*;
+
 public class Main {
 
 	private static void exec(int prog, String[] args) throws Exception {
@@ -119,6 +125,8 @@ public class Main {
 			case 1004:
 				run1004(args);
 				break;
+			case 1005:
+				run1005(args);
 			default:
 				break;
 		}
@@ -325,6 +333,22 @@ public class Main {
 
 	private static void run1004(String[] args){
 		new SparseAppend(args);
+	}
+
+	private static void run1005(String[] args) {
+		if(args.length == 1) {
+			// Do both densesparse and densedense with default values
+			simdMultTests(1.0, 1.0);
+			simdMultTests(1.0, 0.1);
+		} else if(args.length == 3) {
+			// Do just one depending on the input values
+			try {
+				simdMultTests(Double.parseDouble(args[1]), Double.parseDouble(args[2]));
+			} catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+
 	}
 
 	public static void main(String[] args) {
