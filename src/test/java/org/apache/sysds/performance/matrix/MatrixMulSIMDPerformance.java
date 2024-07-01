@@ -9,10 +9,10 @@ import java.io.IOException;
 
 public class MatrixMulSIMDPerformance {
 
-    private static int[] sizes = {1000, 2000, 3000, 15000};
+    private static int[] sizes = {1000, 2000, 3000, 7000, 8000, 10000};
     private static final String BASE_PATH = "vector_api_test/";
 
-    public static void simdMultTests(double sparsityMatrix1, double sparsityMatrix2) {
+    public static void simdMultTests(double sparsityMatrix1, double sparsityMatrix2, int k) {
         // Define the file path for the CSV output
         String outputPath = BASE_PATH + "performance_" + sparsityMatrix1 + "_" + sparsityMatrix2 + ".csv";
         long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0, duration1 = 0, duration2 = 0;
@@ -27,15 +27,18 @@ public class MatrixMulSIMDPerformance {
                 MatrixBlock mbA = MatrixBlock.randOperations(n, n, sparsityMatrix1, 0, 1, "uniform", 7);
                 MatrixBlock mbB = MatrixBlock.randOperations(n, n, sparsityMatrix2, 0, 1, "uniform", 7);
 
-                // Measure the execution time of the matrix multiplication (no SIMD)
+                // Measure the execution time of the matrix multiplication
                 startTime1 = System.nanoTime();
-                LibMatrixMult.matrixMult(mbA, mbB);
+                for(int i = -5; i < 10; i++)
+                    LibMatrixMult.matrixMult(mbA, mbB, k); // No SIMD
                 endTime1 = System.nanoTime();
                 duration1 = (endTime1 - startTime1) / 1000000;
 
                 startTime2 = System.nanoTime();
-                LibMatrixMult2.matrixMult(mbA, mbB);
+                for(int i = -5; i < 10; i++)
+                    LibMatrixMult2.matrixMult(mbA, mbB, k); // SIMD
                 endTime2 = System.nanoTime();
+
                 duration2 = (endTime2 - startTime2) / 1000000;
 
                 // Write to csv
