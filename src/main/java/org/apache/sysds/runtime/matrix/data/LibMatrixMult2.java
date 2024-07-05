@@ -3924,21 +3924,19 @@ public class LibMatrixMult2
 		Vector<Double> b3AsVec;
 		Vector<Double> b4AsVec;
 		// Create DoubleVectors that only contains values aval1, aval2, aval3 and aval4 respectively
-		final DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
-		final DoubleVector aval2Vec = DoubleVector.broadcast(SPECIES, aval2);
-		final DoubleVector aval3Vec = DoubleVector.broadcast(SPECIES, aval3);
-		final DoubleVector aval4Vec = DoubleVector.broadcast(SPECIES, aval4);
+		DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
+		DoubleVector aval2Vec = DoubleVector.broadcast(SPECIES, aval2);
+		DoubleVector aval3Vec = DoubleVector.broadcast(SPECIES, aval3);
+		DoubleVector aval4Vec = DoubleVector.broadcast(SPECIES, aval4);
 
 		// Iterate block-wise
 		for(; j < max; j += SPECIES.length()) {
 			res = DoubleVector.fromArray(SPECIES, c, ci+j);
-
 			b1AsVec = SPECIES.fromArray(b, bi1+j);
 			b2AsVec = SPECIES.fromArray(b, bi2+j);
 			b3AsVec = SPECIES.fromArray(b, bi3+j);
 			b4AsVec = SPECIES.fromArray(b, bi4+j);
 
-			aval1Vec.
 			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
 			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res
 			res = aval3Vec.fma(b3AsVec, res); // compute res' = aval3 * b3 + res

@@ -9,13 +9,15 @@ import java.io.IOException;
 
 public class MatrixMulSIMDPerformance {
 
-    private static int[] sizes = {1000, 2000, 3000, 7000, 8000, 10000};
+    private static int[] sizes = {1000, 5000, 10000, 15000};
     private static final String BASE_PATH = "vector_api_test/";
 
     public static void simdMultTests(double sparsityMatrix1, double sparsityMatrix2, int k) {
+        System.gc();
         // Define the file path for the CSV output
-        String outputPath = BASE_PATH + "performance_" + sparsityMatrix1 + "_" + sparsityMatrix2 + ".csv";
-        long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0, duration1 = 0, duration2 = 0;
+        String outputPath = BASE_PATH + "performance_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_k=" + k + ".csv";
+        long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
+        long avg1 = 0, avg2 = 0;
 
         try (FileWriter writer = new FileWriter(outputPath)) {
             // Write CSV header
@@ -28,21 +30,31 @@ public class MatrixMulSIMDPerformance {
                 MatrixBlock mbB = MatrixBlock.randOperations(n, n, sparsityMatrix2, 0, 1, "uniform", 7);
 
                 // Measure the execution time of the matrix multiplication
-                startTime1 = System.nanoTime();
-                for(int i = -5; i < 10; i++)
+                avg1 = 0;
+                avg2 = 0;
+
+                for(int i = -8; i < 10; i++) {
+                    startTime1 = System.nanoTime();
                     LibMatrixMult.matrixMult(mbA, mbB, k); // No SIMD
-                endTime1 = System.nanoTime();
-                duration1 = (endTime1 - startTime1) / 1000000;
+                    endTime1 = System.nanoTime();
 
-                startTime2 = System.nanoTime();
-                for(int i = -5; i < 10; i++)
+                    if(i >= 0) {
+                        avg1 += (endTime1 - startTime1) / 1000000;
+                    }
+                }
+
+                for(int i = -8; i < 10; i++) {
+                    startTime2 = System.nanoTime();
                     LibMatrixMult2.matrixMult(mbA, mbB, k); // SIMD
-                endTime2 = System.nanoTime();
+                    endTime2 = System.nanoTime();
 
-                duration2 = (endTime2 - startTime2) / 1000000;
+                    if(i >= 0) {
+                        avg2 += (endTime2 - startTime2) / 1000000;
+                    }
+                }
 
                 // Write to csv
-                writer.append(n + "," + duration1 + "," + duration2 + "\n");
+                writer.append(n + "," + avg1/10 + "," + avg2/10 + "\n");
             }
         } catch (IOException e) {
             e.printStackTrace();

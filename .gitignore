@@ -146,3 +146,5 @@ src/test/scripts/functions/pipelines/intermediates/classification/*
 
 venv
 venv/*
+
+vector_api_test
