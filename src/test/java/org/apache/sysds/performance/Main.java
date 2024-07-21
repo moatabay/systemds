@@ -339,14 +339,14 @@ public class Main {
 	private static void run1005(String[] args) {
 		if(args.length == 1) {
 			// Do both densesparse and densedense with default values
-			simdMultTests(1.0, 1.0, 1);
-			simdMultTests(1.0, 0.1, 1);
-		} else if(args.length == 4) {
+			simdMultTests(1.0, 1.0, 1, "1000-3000#1000");
+			simdMultTests(1.0, 0.1, 1, "1000-3000#1000");
+		} else if(args.length == 5) {
 			// Do just one depending on the input values
 			try {
 				simdMultTests(	Double.parseDouble(args[1]),
 								Double.parseDouble(args[2]),
-								Integer.parseInt(args[3]) );
+								Integer.parseInt(args[3]), args[4]);
 			} catch (NumberFormatException e) {
 				e.printStackTrace();
 			}
