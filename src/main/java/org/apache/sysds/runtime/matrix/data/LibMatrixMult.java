@@ -259,14 +259,12 @@ public class LibMatrixMult
 		if(ultraSparse && !fixedRet)
 			matrixMultUltraSparse(m1, m2, ret, m1Perm, 0, ru2);
 		else if(!m1.sparse && !m2.sparse) {
-			System.out.println("DenseDense");
 			matrixMultDenseDense(m1, m2, ret, tm2, pm2, 0, ru2, 0, m2.clen);
 		} else if(m1.sparse && m2.sparse)
 			matrixMultSparseSparse(m1, m2, ret, pm2, sparse, 0, ru2);
 		else if(m1.sparse)
 			matrixMultSparseDense(m1, m2, ret, pm2, 0, ru2);
 		else {
-			System.out.println("DenseSparse");
 			matrixMultDenseSparse(m1, m2, ret, pm2, 0, ru2);
 		}
 

@@ -3810,7 +3810,10 @@ public class LibMatrixMult2
 		// Iterate block-wise
 		for(; j < max; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci+j); // Create DoubleVector res to compute on
+			//long time1 = System.nanoTime();
 			bAsVec = DoubleVector.fromArray(SPECIES, b, bi+j); // Create a Vector containing doubles from Array b starting at bi+j
+			//long time2 = System.nanoTime();
+			//System.out.println("vectMultiplyAdd1.1 : " + (time2-time1));
 			res = avalVec.fma(bAsVec, res); // compute res' = aval * b + res
 			res.intoArray(c, ci+j); // Store res into c starting from ci+j
 		}
@@ -3826,6 +3829,7 @@ public class LibMatrixMult2
 	// 7-arg add function
 	public static void vectMultiplyAdd( final double aval, double[] b, double[] c, int[] bix, final int bi, final int ci, final int len )
 	{
+
 		int j = 0;
 		int max = SPECIES.loopBound(len);
 		int speciesLen = SPECIES.length();
@@ -3837,7 +3841,11 @@ public class LibMatrixMult2
 		// Iterate block-wise
 		for(; j < max; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci+bix[j]); // Create DoubleVector res to compute on
+			//long time1 = System.nanoTime();
 			bAsVec = DoubleVector.fromArray(SPECIES, b, bi+j); // Create a Vector containing doubles from Array b starting at bi+j
+			//long time2 = System.nanoTime();
+			//System.out.println("vectMultiplyAdd1.2 : " + (time2-time1));
+
 			res = avalVec.fma(bAsVec, res); // compute res' = aval * b + res
 			res.intoArray(c, ci+bix[j]); // Store res into c starting from ci+bix[j]
 		}
@@ -3850,6 +3858,7 @@ public class LibMatrixMult2
 	// TODO: Rework
 	private static void vectMultiplyAdd2( final double aval1, final double aval2, double[] b, double[] c, int bi1, int bi2, int ci, final int len )
 	{
+
 		int j = 0;
 		int max = SPECIES.loopBound(len);
 		int speciesLen = SPECIES.length();
@@ -3862,8 +3871,11 @@ public class LibMatrixMult2
 		// Iterate block-wise
 		for(; j < max; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci + j);
+			//long time1 = System.nanoTime();
 			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
 			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
+			//long time2 = System.nanoTime();
+			//System.out.println("vectMultiplyAdd2 : " + (time2-time1));
 
 			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
 			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res => res = aval1 * b1 + aval2 * b2 + res
@@ -3892,9 +3904,12 @@ public class LibMatrixMult2
 		// Iterate block-wise
 		for(; j < max; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci + j);
+			//long time1 = System.nanoTime();
 			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
 			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
 			b3AsVec = DoubleVector.fromArray(SPECIES, b, bi3 + j);
+			//long time2 = System.nanoTime();
+			//System.out.println("vectMultiplyAdd3 : " + (time2-time1));
 
 			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
 			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res
@@ -3911,6 +3926,7 @@ public class LibMatrixMult2
 	// TODO: Rework
 	private static void vectMultiplyAdd4( final double aval1, final double aval2, final double aval3, final double aval4, double[] b, double[] c, int bi1, int bi2, int bi3, int bi4, int ci, final int len )
 	{
+
 		int j = 0;
 		int max = SPECIES.loopBound(len);
 		int speciesLen = SPECIES.length();
@@ -3924,12 +3940,14 @@ public class LibMatrixMult2
 
 		// Iterate block-wise
 		for(; j < max; j += speciesLen) {
+			//long time1 = System.nanoTime();
 			res = DoubleVector.fromArray(SPECIES, c, ci+j);
 			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1+j);
 			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2+j);
 			b3AsVec = DoubleVector.fromArray(SPECIES, b, bi3+j);
 			b4AsVec = DoubleVector.fromArray(SPECIES, b, bi4+j);
-
+			//long time2 = System.nanoTime();
+			//System.out.println("vectMultiplyAdd4 : " + (time2-time1));
 			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
 			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res
 			res = aval3Vec.fma(b3AsVec, res); // compute res' = aval3 * b3 + res
@@ -3941,6 +3959,8 @@ public class LibMatrixMult2
 		for(; j < len; j++) {
 			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j] + aval3 * b[bi3 + j] + aval4 * b[bi4 + j];
 		}
+
+
 	}
 
 	@SuppressWarnings("unused")

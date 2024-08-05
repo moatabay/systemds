@@ -128,6 +128,8 @@ public class Main {
 				break;
 			case 1005:
 				run1005(args);
+			case 1006:
+				run1006(args);
 			default:
 				break;
 		}
@@ -339,19 +341,39 @@ public class Main {
 	private static void run1005(String[] args) {
 		if(args.length == 1) {
 			// Do both densesparse and densedense with default values
-			simdMultTests(1.0, 1.0, 1, "1000-3000#1000");
-			simdMultTests(1.0, 0.1, 1, "1000-3000#1000");
+			simdMultTestsStaticKDynamicN(1.0, 1.0, 1, "1000-3000#1000");
+			simdMultTestsStaticKDynamicN(1.0, 0.1, 1, "1000-3000#1000");
 		} else if(args.length == 5) {
 			// Do just one depending on the input values
 			try {
-				simdMultTests(	Double.parseDouble(args[1]),
+				simdMultTestsStaticKDynamicN(	Double.parseDouble(args[1]),
 								Double.parseDouble(args[2]),
 								Integer.parseInt(args[3]), args[4]);
 			} catch (NumberFormatException e) {
 				e.printStackTrace();
 			}
 		}
+	}
 
+	/**
+	 * Test with changing k's with only one 
+	 * @param args
+	 */
+	private static void run1006(String[] args) {
+		if(args.length == 1) {
+			// Do both densesparse and densedense with default values
+			simdMultTestsDynamicKStaticN(1.0, 1.0,  20000, "8-32#8");
+			simdMultTestsDynamicKStaticN(1.0, 0.1,  20000, "8-32#8");
+		} else if(args.length == 5) {
+			// Do just one depending on the input values
+			try {
+				simdMultTestsDynamicKStaticN(	Double.parseDouble(args[1]),
+						Double.parseDouble(args[2]),
+						Integer.parseInt(args[3]), args[4]);
+			} catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 	public static void main(String[] args) {
