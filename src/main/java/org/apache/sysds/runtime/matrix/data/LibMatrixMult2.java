@@ -20,6 +20,7 @@
 package org.apache.sysds.runtime.matrix.data;
 
 import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.Vector;
 import jdk.incubator.vector.VectorSpecies;
 import org.apache.commons.lang3.NotImplementedException;
@@ -235,7 +236,7 @@ public class LibMatrixMult2
 		else
 			parallelMatrixMult(m1, m2, ret, k, ultraSparse, sparse, tm2, m1Perm);
 
-		System.out.println("SIMD - MM "+k+" ("+m1.isInSparseFormat()+","+m1.getNumRows()+","+m1.getNumColumns()+","+m1.getNonZeros()+")x" +
+		System.out.println("SIMD    MM "+k+" ("+m1.isInSparseFormat()+","+m1.getNumRows()+","+m1.getNumColumns()+","+m1.getNonZeros()+")x" +
 				"("+m2.isInSparseFormat()+","+m2.getNumRows()+","+m2.getNumColumns()+","+m2.getNonZeros()+") in "+time.stop());
 	
 		return ret;
@@ -251,14 +252,12 @@ public class LibMatrixMult2
 		if(ultraSparse && !fixedRet)
 			matrixMultUltraSparse(m1, m2, ret, m1Perm, 0, ru2);
 		else if(!m1.sparse && !m2.sparse) {
-			System.out.println("DenseDense");
 			matrixMultDenseDense(m1, m2, ret, tm2, pm2, 0, ru2, 0, m2.clen);
 		} else if(m1.sparse && m2.sparse)
 			matrixMultSparseSparse(m1, m2, ret, pm2, sparse, 0, ru2);
 		else if(m1.sparse)
 			matrixMultSparseDense(m1, m2, ret, pm2, 0, ru2);
 		else {
-			System.out.println("DenseSparse");
 			matrixMultDenseSparse(m1, m2, ret, pm2, 0, ru2);
 		}
 
@@ -3847,7 +3846,8 @@ public class LibMatrixMult2
 			//System.out.println("vectMultiplyAdd1.2 : " + (time2-time1));
 
 			res = avalVec.fma(bAsVec, res); // compute res' = aval * b + res
-			res.intoArray(c, ci+bix[j]); // Store res into c starting from ci+bix[j]
+			//res.intoArray(c, ci+bix[j]); // Store res into c starting from ci+bix[j]
+			res.intoArray(c, ci, bix, j);
 		}
 
 		// Rest

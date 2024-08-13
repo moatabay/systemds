@@ -28,7 +28,7 @@ public class MatrixMulSIMDPerformance {
 
         try (FileWriter writer = new FileWriter(outputPath)) {
             // Write CSV header
-            writer.append("n,exec_time_no_simd,exec_time_simd\n");
+            writer.append("n,k,exec_time_no_simd,exec_time_simd\n");
 
             // densedenseMM multiplication
             int[] sizes = calculateSizes(stepStr);
@@ -64,7 +64,7 @@ public class MatrixMulSIMDPerformance {
                 System.out.println("Averages - NO-SIMD: " + (double) avg1/10 + "; SIMD: " + (double) avg2/10);
                 System.out.println("------------------");
                 // Write to csv
-                writer.append(n + "," + avg1/10 + "," + avg2/10 + "\n");
+                writer.append(n + "," + k + "," + avg1/10 + "," + avg2/10 + "\n");
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -92,7 +92,6 @@ public class MatrixMulSIMDPerformance {
             // Write CSV header
             writer.append("n,k,exec_time_no_simd,exec_time_simd\n");
 
-            // densedenseMM multiplication
             int[] threadAmount = calculateSizes(stepStr);
             for (int k : threadAmount) {
                 // Generate two random dense matrices

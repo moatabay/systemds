@@ -128,8 +128,13 @@ public class Main {
 				break;
 			case 1005:
 				run1005(args);
+				break;
 			case 1006:
 				run1006(args);
+				break;
+			case 1007:
+				run1007(args);
+				break;
 			default:
 				break;
 		}
@@ -374,6 +379,20 @@ public class Main {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	private static void run1007(String[] args) {
+		simdMultTestsDynamicKStaticN(0.71234, 0.00001, 25000, "32-128#32");
+		simdMultTestsDynamicKStaticN(0.71234, 0.25001, 25000, "32-128#32");
+		simdMultTestsDynamicKStaticN(0.71234, 0.50001, 25000, "32-128#32");
+		simdMultTestsDynamicKStaticN(0.71234, 0.75001, 25000, "32-128#32");
+		simdMultTestsDynamicKStaticN(0.71234, 1, 25000, "32-128#32");
+
+		simdMultTestsStaticKDynamicN(0.71234, 0.00001, 96, "25000-35000#5000");
+		simdMultTestsStaticKDynamicN(0.71234, 0.25001, 96, "25000-35000#5000");
+		simdMultTestsStaticKDynamicN(0.71234, 0.50001, 96, "25000-35000#5000");
+		simdMultTestsStaticKDynamicN(0.71234, 0.75001, 96, "25000-35000#5000");
+		simdMultTestsStaticKDynamicN(0.71234, 1, 96, "25000-35000#5000");
 	}
 
 	public static void main(String[] args) {
