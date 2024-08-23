@@ -65,7 +65,7 @@
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 		<maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
 		<!-- Set java compile level via argument, ex: 1.8 1.9 10 11-->
-		<java.level>17</java.level>
+		<java.level>21</java.level>
 		<java.version>{java.level}</java.version>
 		<!-->Testing settings<!-->
 		<maven.test.skip>false</maven.test.skip>

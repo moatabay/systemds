@@ -36,6 +36,7 @@ import org.apache.sysds.performance.matrix.MatrixStorage;
 import org.apache.sysds.performance.matrix.SparseAppend;
 import org.apache.sysds.runtime.data.SparseBlock;
 import org.apache.sysds.runtime.frame.data.FrameBlock;
+import org.apache.sysds.runtime.matrix.data.LibMatrixMult2;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
 import org.apache.sysds.runtime.util.CommonThreadPool;
 import org.apache.sysds.test.TestUtils;
@@ -382,6 +383,10 @@ public class Main {
 	}
 
 	private static void run1007(String[] args) {
+		MatrixBlock mbA = MatrixBlock.randOperations(10, 10, 1, 0, 0.05, "uniform", 7, 8);
+		MatrixBlock mbB = MatrixBlock.randOperations(10, 10, 0.6, 0, 0.001, "uniform", 7, 8);
+		LibMatrixMult2.matrixMult(mbA, mbB, 8);
+		/*
 		simdMultTestsDynamicKStaticN(0.71234, 0.00001, 25000, "32-128#32");
 		simdMultTestsDynamicKStaticN(0.71234, 0.25001, 25000, "32-128#32");
 		simdMultTestsDynamicKStaticN(0.71234, 0.50001, 25000, "32-128#32");
@@ -393,6 +398,8 @@ public class Main {
 		simdMultTestsStaticKDynamicN(0.71234, 0.50001, 96, "25000-35000#5000");
 		simdMultTestsStaticKDynamicN(0.71234, 0.75001, 96, "25000-35000#5000");
 		simdMultTestsStaticKDynamicN(0.71234, 1, 96, "25000-35000#5000");
+		*/
+
 	}
 
 	public static void main(String[] args) {
