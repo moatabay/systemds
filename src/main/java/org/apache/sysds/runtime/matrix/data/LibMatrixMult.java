@@ -3932,7 +3932,11 @@ public class LibMatrixMult
 	public static void vectMultiplyAdd( final double aval, double[] b, double[] c, int[] bix, final int bi, final int ci, final int len )
 	{
 		final int bn = len%8;
-		
+//		System.out.println("b.length" + b.length);
+//		System.out.println("c.length" + c.length);
+//		System.out.println("bix.length" + bix.length);
+//		System.out.println("len" + len);
+
 		//rest, not aligned to 8-blocks
 		for( int j = bi; j < bi+bn; j++ )
 			c[ ci + bix[j] ] += aval * b[ j ];

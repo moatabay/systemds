@@ -383,23 +383,13 @@ public class Main {
 	}
 
 	private static void run1007(String[] args) {
-		MatrixBlock mbA = MatrixBlock.randOperations(10, 10, 1, 0, 0.05, "uniform", 7, 8);
-		MatrixBlock mbB = MatrixBlock.randOperations(10, 10, 0.6, 0, 0.001, "uniform", 7, 8);
-		LibMatrixMult2.matrixMult(mbA, mbB, 8);
-		/*
-		simdMultTestsDynamicKStaticN(0.71234, 0.00001, 25000, "32-128#32");
-		simdMultTestsDynamicKStaticN(0.71234, 0.25001, 25000, "32-128#32");
-		simdMultTestsDynamicKStaticN(0.71234, 0.50001, 25000, "32-128#32");
-		simdMultTestsDynamicKStaticN(0.71234, 0.75001, 25000, "32-128#32");
-		simdMultTestsDynamicKStaticN(0.71234, 1, 25000, "32-128#32");
-
-		simdMultTestsStaticKDynamicN(0.71234, 0.00001, 96, "25000-35000#5000");
-		simdMultTestsStaticKDynamicN(0.71234, 0.25001, 96, "25000-35000#5000");
-		simdMultTestsStaticKDynamicN(0.71234, 0.50001, 96, "25000-35000#5000");
-		simdMultTestsStaticKDynamicN(0.71234, 0.75001, 96, "25000-35000#5000");
-		simdMultTestsStaticKDynamicN(0.71234, 1, 96, "25000-35000#5000");
-		*/
-
+		if(args.length == 5) {
+			try {
+				squareMatrixSIMDTest(Double.parseDouble(args[1]), Double.parseDouble(args[2]), args[3], args[4]);
+			} catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 	public static void main(String[] args) {
