@@ -383,9 +383,9 @@ public class Main {
 	}
 
 	private static void run1007(String[] args) {
-		if(args.length == 5) {
+		if(args.length == 6) {
 			try {
-				squareMatrixSIMDTest(Double.parseDouble(args[1]), Double.parseDouble(args[2]), args[3], args[4]);
+				squareMatrixSIMDTest(Double.parseDouble(args[1]), Double.parseDouble(args[2]), args[3], args[4], Integer.parseInt(args[5]));
 			} catch (NumberFormatException e) {
 				e.printStackTrace();
 			}

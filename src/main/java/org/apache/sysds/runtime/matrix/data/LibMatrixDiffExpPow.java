@@ -6,39 +6,39 @@ import jdk.incubator.vector.VectorSpecies;
 
 public class LibMatrixDiffExpPow {
 
-//    private static final VectorSpecies<Double> SPECIES = DoubleVector.SPECIES_PREFERRED;
-//
-//    /**
-//     * Raises each element in the given vector to the specified power.
-//     *
-//     * @param vec    The input DoubleVector.
-//     * @param power  The power to raise each element to.
-//     * @return DoubleVector with each element raised to the specified power.
-//     */
-//    private static DoubleVector power(DoubleVector vec, double power) {
-//        return vec.pow(power);
-//    }
-//
-//    /**
-//     * Applies the exponential function to each element in the given vector.
-//     *
-//     * @param vec The input DoubleVector.
-//     * @return DoubleVector with exp() applied on each element.
-//     */
-//    private static DoubleVector exp(DoubleVector vec) {
-//        return vec.lanewise(VectorOperators.EXP);
-//    }
-//
-//    /**
-//     * Computes the difference between two vectors element-wise.
-//     *
-//     * @param vec1 The first DoubleVector.
-//     * @param vec2 The second DoubleVector.
-//     * @return DoubleVector that is the result of: vec2 - vec1
-//     */
-//    private static DoubleVector diff(DoubleVector vec1, DoubleVector vec2) {
-//        return vec2.sub(vec1);
-//    }
+    private static final VectorSpecies<Double> SPECIES = DoubleVector.SPECIES_PREFERRED;
+
+    /**
+     * Raises each element in a DoubleVector by a certain power.
+     *
+     * @param vec    The input DoubleVector.
+     * @param power  The power to raise each element to.
+     * @return DoubleVector with each element raised to the specified power.
+     */
+    private static DoubleVector power(DoubleVector vec, double power) {
+        return vec.pow(power);
+    }
+
+    /**
+     * Applies the exponential function to each element in a DoubleVector.
+     *
+     * @param vec The input DoubleVector.
+     * @return DoubleVector with exp() applied on each element.
+     */
+    private static DoubleVector exp(DoubleVector vec) {
+        return vec.lanewise(VectorOperators.EXP);
+    }
+
+    /**
+     * Computes the difference between two DoublesVectors.
+     *
+     * @param vec1 The first DoubleVector.
+     * @param vec2 The second DoubleVector.
+     * @return DoubleVector that is the result of: vec2 - vec1
+     */
+    private static DoubleVector diff(DoubleVector vec1, DoubleVector vec2) {
+        return vec2.sub(vec1);
+    }
 //
 //    /**
 //     * Raises each element of the given matrix to the specified power using vectorization.

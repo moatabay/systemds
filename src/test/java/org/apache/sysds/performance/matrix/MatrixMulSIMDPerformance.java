@@ -15,7 +15,7 @@ public class MatrixMulSIMDPerformance {
     private static final String BASE_PATH = "vector_api_test/";
     private static final double EPSILON = 1E-10;
 
-    public static void squareMatrixSIMDTest(double sparsityMatrix1, double sparsityMatrix2, String kSteps, String nSteps) {
+    public static void squareMatrixSIMDTest(double sparsityMatrix1, double sparsityMatrix2, String kSteps, String nSteps, int warmUpIterations) {
         String outputPath = BASE_PATH + "performance1_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_k=" + kSteps + "_n=" + nSteps + ".csv";
         long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
         double avg1 = 0.0, avg2 = 0.0, improvement = 0.0;
@@ -32,19 +32,17 @@ public class MatrixMulSIMDPerformance {
             // Write CSV header
             writer.append("n,k,exec_time_no_simd,exec_time_simd,improvement\n");
 
-            // densedenseMM multiplication
             int[] kSizes = calculateSizes(kSteps);
             int[] nSizes = calculateSizes(nSteps);
 
-            MatrixBlock warmUpA = MatrixBlock.randOperations(128, 128, sparsityMatrix1, 0, 1, "uniform", 7);
-            MatrixBlock warmUpB = MatrixBlock.randOperations(128, 128, sparsityMatrix2, 0, 1, "uniform", 7);
+            MatrixBlock warmUpA = MatrixBlock.randOperations(2000, 2000, sparsityMatrix1, 0, 1, "uniform", 7);
+            MatrixBlock warmUpB = MatrixBlock.randOperations(2000, 2000, sparsityMatrix2, 0, 1, "uniform", 7);
 
-            for(int i = 0; i < 10000; i++) {
+            for(int i = 0; i < warmUpIterations; i++) {
                 LibMatrixMult.matrixMult(warmUpA, warmUpB, kSizes[0]);
                 LibMatrixMult2.matrixMult(warmUpA, warmUpB, kSizes[0]);
             }
 
-            //TODO: Only iterates through first element
             for (int k : kSizes) {
                 for (int n : nSizes) {
                     // Generate two random dense matrices

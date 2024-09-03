@@ -69,7 +69,6 @@ public class LibMatrixMult2
 	public static final int L3_CACHESIZE = 16 * 1024 * 1024; //16MB (common size)
 	private static final Log LOG = LogFactory.getLog(LibMatrixMult.class.getName());
 	private static final VectorSpecies<Double> SPECIES = DoubleVector.SPECIES_PREFERRED;
-	private static VectorSpecies<Integer> INT_SPECIES = null;
 
 	private LibMatrixMult2() {
 		//prevent instantiation via private constructor
@@ -228,10 +227,6 @@ public class LibMatrixMult2
 				|| fixedRet) // Fixed ret not supported in multithreaded execution yet
 			k = 1;
 
-		if(calculateIntSpecies() == -1) {
-			throw new DMLRuntimeException("Illegal DoubleVector species detected");
-		}
-
 		if(k <= 1) {
 			singleThreadedMatrixMult(m1, m2, ret, ultraSparse, sparse, tm2, m1Perm, fixedRet);
 		}
@@ -242,19 +237,6 @@ public class LibMatrixMult2
 				"("+m2.isInSparseFormat()+","+m2.getNumRows()+","+m2.getNumColumns()+","+m2.getNonZeros()+") in "+time.stop());
 	
 		return ret;
-	}
-
-	private static int calculateIntSpecies() {
-		if(SPECIES.equals(DoubleVector.SPECIES_512)) {
-			INT_SPECIES = IntVector.SPECIES_256;
-		} else if(SPECIES.equals(DoubleVector.SPECIES_256)) {
-			INT_SPECIES = IntVector.SPECIES_128;
-		} else if(SPECIES.equals(DoubleVector.SPECIES_128)) {
-			INT_SPECIES = IntVector.SPECIES_64;
-		} else {
-			return -1;
-		}
-		return 0;
 	}
 
 	private static void singleThreadedMatrixMult(MatrixBlock m1, MatrixBlock m2, MatrixBlock ret,  
@@ -1061,7 +1043,7 @@ public class LibMatrixMult2
 				vectMultiplyWrite(b.get(0,0), avals, cvals, rl, rl, ru-rl);
 			}
 			else if( n==1 && cd<=2*1024 ) { //MATRIX-VECTOR (short rhs)
-				matrixMultDenseDenseMVShortRHS(a, b, c, cd, rl, ru);
+				matrixMultDenseDenseMVShortRHS(a, b, c, cd, rl, ru); // TODO
 			}
 			else if( n==1 ) {               //MATRIX-VECTOR (tall rhs)
 				matrixMultDenseDenseMVTallRHS(a, b, c, cd, rl, ru);
@@ -1076,7 +1058,7 @@ public class LibMatrixMult2
 				matrixMultDenseDenseMMSkinnyRHS(a, b, c, m2.rlen, cd, rl, ru);
 			}
 			else {                          //MATRIX-MATRIX
-				matrixMultDenseDenseMM(a, b, c, n, cd, rl, ru, cl, cu);
+				matrixMultDenseDenseMM(a, b, c, n, cd, rl, ru, cl, cu); //TODO
 			}
 		}
 		else {
@@ -1303,7 +1285,7 @@ public class LibMatrixMult2
 							b.indexes(k), b.pos(k), 0, b.size(k));
 					}
 			}
-			else {                     //MATRIX-MATRIX
+			else {                     //MATRIX-MATRIX // TODO
 				//best effort blocking, without blocking over J because it is 
 				//counter-productive, even with front of current indexes
 				final int blocksizeK = 32;
@@ -1367,7 +1349,7 @@ public class LibMatrixMult2
 					c.set(0, 0, dotProduct(a.values(0), b.values(0), a.indexes(0), a.pos(0), 0, a.size(0)));
 			}
 			else if( n==1 && cd<=2*1024 ) { //MATRIX-VECTOR (short rhs)
-				matrixMultSparseDenseMVShortRHS(a, b, c, cd, rl, ru);
+				matrixMultSparseDenseMVShortRHS(a, b, c, cd, rl, ru); //TODO
 			}
 			else if( n==1 ) {               //MATRIX-VECTOR (tall rhs)
 				matrixMultSparseDenseMVTallRHS(a, b, c, cd, xsp, rl, ru);
@@ -1382,7 +1364,7 @@ public class LibMatrixMult2
 				matrixMultSparseDenseMMSkinnyRHS(a, b, c, n, rl, ru);
 			}
 			else {                          //MATRIX-MATRIX
-				matrixMultSparseDenseMM(a, b, c, n, cd, xsp, rl, ru);
+				matrixMultSparseDenseMM(a, b, c, n, cd, xsp, rl, ru); //TODO
 			}
 		}
 		else {
@@ -3815,15 +3797,13 @@ public class LibMatrixMult2
 		int j = 0;
 		int speciesLen = SPECIES.length();
 		int max = SPECIES.loopBound(len);
+		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
+		DoubleVector res, bAsVec;
 
 		// Rest loop to handle elements that don't fit into full vector size
 		for (; j < len % speciesLen; j++) {
 			c[ci+j] += aval * b[bi+j];
 		}
-
-		// Create DoubleVector that only contains values of aval
-		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
-		DoubleVector res, bAsVec;
 
 		// Block-wise iterations
 		for (; j < max; j += speciesLen) {
@@ -3841,36 +3821,20 @@ public class LibMatrixMult2
 		int j = 0;
 		int speciesLen = SPECIES.length();
 		int max = SPECIES.loopBound(len);
+		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
+		DoubleVector bAsVec, res;
 
 		// Rest
 		for (; j < len % speciesLen; j++) {
 			c[ci + bix[bi + j]] += aval * b[bi + j];
 		}
 
-		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
-		DoubleVector bAsVec, cAsVec, res;
-		IntVector bixAsVec;
-
 		// Block-wise iteration
 		for (; j < max; j += speciesLen) {
-			// Load vectors for b and bix
 			bAsVec = DoubleVector.fromArray(SPECIES, b, bi + j);
-			bixAsVec = IntVector.fromArray(INT_SPECIES, bix, bi + j);
-
-			// Gather current values from the c array based on the indices in bixVector
-			cAsVec = DoubleVector.zero(SPECIES);
-			for (int k = 0; k < speciesLen; k++) {
-				cAsVec = cAsVec.withLane(k, c[ci + bixAsVec.lane(k)]);
-			}
-
-			// Perform the FMA operation
-			res = avalVec.fma(bAsVec, cAsVec);
-
-			res.intoArray(c, ci, bix, bi+j);
-			// Scatter the results back into the c array
-//			for (int k = 0; k < speciesLen; k++) {
-//				c[ci + bixAsVec.lane(k)] = res.lane(k);
-//			}
+			res = DoubleVector.fromArray(SPECIES, c, ci, bix, bi+j); // Gather values based on indexMap bix
+			res = avalVec.fma(bAsVec, res);
+			res.intoArray(c, ci, bix, bi+j); // Scatter the results back into the c array
 		}
 	}
 
@@ -3900,11 +3864,8 @@ public class LibMatrixMult2
 			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res => res = aval1 * b1 + aval2 * b2 + res
 			res.intoArray(c, ci+j);
 		}
-
-
 	}
 
-	// TODO: Rework
 	private static void vectMultiplyAdd3( final double aval1, final double aval2, final double aval3, double[] b, double[] c, int bi1, int bi2, int bi3, int ci, final int len )
 	{
 		int j = 0;
@@ -3936,7 +3897,6 @@ public class LibMatrixMult2
 		}
 	}
 
-	// TODO: Rework
 	private static void vectMultiplyAdd4( final double aval1, final double aval2, final double aval3, final double aval4, double[] b, double[] c, int bi1, int bi2, int bi3, int bi4, int ci, final int len )
 	{
 		int j = 0;
