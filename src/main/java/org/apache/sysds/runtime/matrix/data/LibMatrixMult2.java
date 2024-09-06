@@ -19,7 +19,16 @@
 
 package org.apache.sysds.runtime.matrix.data;
 
-import jdk.incubator.vector.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
+
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -34,20 +43,23 @@ import org.apache.sysds.lops.WeightedUnaryMM.WUMMType;
 import org.apache.sysds.runtime.DMLRuntimeException;
 import org.apache.sysds.runtime.controlprogram.parfor.stat.InfrastructureAnalyzer;
 import org.apache.sysds.runtime.controlprogram.parfor.stat.Timing;
-import org.apache.sysds.runtime.data.*;
+import org.apache.sysds.runtime.data.DenseBlock;
+import org.apache.sysds.runtime.data.DenseBlockFP64DEDUP;
+import org.apache.sysds.runtime.data.DenseBlockFactory;
+import org.apache.sysds.runtime.data.SparseBlock;
 import org.apache.sysds.runtime.data.SparseBlock.Type;
+import org.apache.sysds.runtime.data.SparseBlockCSR;
+import org.apache.sysds.runtime.data.SparseBlockFactory;
+import org.apache.sysds.runtime.data.SparseBlockMCSR;
+import org.apache.sysds.runtime.data.SparseRow;
+import org.apache.sysds.runtime.data.SparseRowScalar;
+import org.apache.sysds.runtime.data.SparseRowVector;
 import org.apache.sysds.runtime.functionobjects.SwapIndex;
 import org.apache.sysds.runtime.functionobjects.ValueFunction;
 import org.apache.sysds.runtime.matrix.operators.ReorgOperator;
 import org.apache.sysds.runtime.util.CommonThreadPool;
 import org.apache.sysds.runtime.util.UtilFunctions;
 import org.apache.sysds.utils.NativeHelper;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.*;
-import java.util.stream.IntStream;
 
 /**
  * MB: Library for matrix multiplications including MM, MV, VV for all
@@ -67,8 +79,7 @@ public class LibMatrixMult2
 	private static final long PAR_MINFLOP_THRESHOLD2 = 128L*1024; //MIN 2 MFLOP
 	public static final int L2_CACHESIZE = 256 * 1024; //256KB (common size)
 	public static final int L3_CACHESIZE = 16 * 1024 * 1024; //16MB (common size)
-	private static final Log LOG = LogFactory.getLog(LibMatrixMult.class.getName());
-	private static final VectorSpecies<Double> SPECIES = DoubleVector.SPECIES_PREFERRED;
+	private static final Log LOG = LogFactory.getLog(LibMatrixMult2.class.getName());
 
 	private LibMatrixMult2() {
 		//prevent instantiation via private constructor
@@ -227,13 +238,12 @@ public class LibMatrixMult2
 				|| fixedRet) // Fixed ret not supported in multithreaded execution yet
 			k = 1;
 
-		if(k <= 1) {
+		if(k <= 1)
 			singleThreadedMatrixMult(m1, m2, ret, ultraSparse, sparse, tm2, m1Perm, fixedRet);
-		}
 		else
 			parallelMatrixMult(m1, m2, ret, k, ultraSparse, sparse, tm2, m1Perm);
 
-		System.out.println("SIMD    MM "+k+" ("+m1.isInSparseFormat()+","+m1.getNumRows()+","+m1.getNumColumns()+","+m1.getNonZeros()+")x" +
+		System.out.println("NO-SIMD MM "+k+" ("+m1.isInSparseFormat()+","+m1.getNumRows()+","+m1.getNumColumns()+","+m1.getNonZeros()+")x" +
 				"("+m2.isInSparseFormat()+","+m2.getNumRows()+","+m2.getNumColumns()+","+m2.getNonZeros()+") in "+time.stop());
 	
 		return ret;
@@ -328,7 +338,7 @@ public class LibMatrixMult2
 		}
 	}
 
-	/**DoubleVector res = DoubleVector.fromArray(SPECIES, c, ci+j);
+	/**
 	 * Performs a matrix multiplication chain operation of type t(X)%*%(X%*%v) or t(X)%*%(w*(X%*%v)).
 	 * 
 	 * All variants use a IKJ access pattern, and internally use dense output. After the
@@ -1043,7 +1053,7 @@ public class LibMatrixMult2
 				vectMultiplyWrite(b.get(0,0), avals, cvals, rl, rl, ru-rl);
 			}
 			else if( n==1 && cd<=2*1024 ) { //MATRIX-VECTOR (short rhs)
-				matrixMultDenseDenseMVShortRHS(a, b, c, cd, rl, ru); // TODO
+				matrixMultDenseDenseMVShortRHS(a, b, c, cd, rl, ru);
 			}
 			else if( n==1 ) {               //MATRIX-VECTOR (tall rhs)
 				matrixMultDenseDenseMVTallRHS(a, b, c, cd, rl, ru);
@@ -1058,7 +1068,7 @@ public class LibMatrixMult2
 				matrixMultDenseDenseMMSkinnyRHS(a, b, c, m2.rlen, cd, rl, ru);
 			}
 			else {                          //MATRIX-MATRIX
-				matrixMultDenseDenseMM(a, b, c, n, cd, rl, ru, cl, cu); //TODO
+				matrixMultDenseDenseMM(a, b, c, n, cd, rl, ru, cl, cu);
 			}
 		}
 		else {
@@ -1204,7 +1214,6 @@ public class LibMatrixMult2
 	}
 
 	//note: public for use by codegen for consistency
-	// TODO
 	public static void matrixMultDenseDenseMM(DenseBlock a, DenseBlock b, DenseBlock c, int n, int cd, int rl, int ru, int cl, int cu) {
 		//1) Unrolled inner loop (for better instruction-level parallelism)
 		//2) Blocked execution (for less cache trashing in parallel exec)
@@ -1220,7 +1229,7 @@ public class LibMatrixMult2
 
 		//blocked execution
 		for( int bi = rl; bi < ru; bi+=blocksizeI )
-			for( int bk = 0, bimin = Math.min(ru, bi+blocksizeI); bk < cd; bk+=blocksizeK )
+			for( int bk = 0, bimin = Math.min(ru, bi+blocksizeI); bk < cd; bk+=blocksizeK ) 
 				for( int bj = cl, bkmin = Math.min(cd, bk+blocksizeK); bj < cu; bj+=blocksizeJ ) 
 				{
 					int bklen = bkmin-bk;
@@ -1263,7 +1272,6 @@ public class LibMatrixMult2
 				}
 	}
 
-	// TODO
 	private static void matrixMultDenseSparse(MatrixBlock m1, MatrixBlock m2, MatrixBlock ret, boolean pm2, int rl, int ru) {
 		DenseBlock a = m1.getDenseBlock();
 		DenseBlock c = ret.getDenseBlock();
@@ -1285,7 +1293,7 @@ public class LibMatrixMult2
 							b.indexes(k), b.pos(k), 0, b.size(k));
 					}
 			}
-			else {                     //MATRIX-MATRIX // TODO
+			else {                     //MATRIX-MATRIX
 				//best effort blocking, without blocking over J because it is 
 				//counter-productive, even with front of current indexes
 				final int blocksizeK = 32;
@@ -1349,7 +1357,7 @@ public class LibMatrixMult2
 					c.set(0, 0, dotProduct(a.values(0), b.values(0), a.indexes(0), a.pos(0), 0, a.size(0)));
 			}
 			else if( n==1 && cd<=2*1024 ) { //MATRIX-VECTOR (short rhs)
-				matrixMultSparseDenseMVShortRHS(a, b, c, cd, rl, ru); //TODO
+				matrixMultSparseDenseMVShortRHS(a, b, c, cd, rl, ru);
 			}
 			else if( n==1 ) {               //MATRIX-VECTOR (tall rhs)
 				matrixMultSparseDenseMVTallRHS(a, b, c, cd, xsp, rl, ru);
@@ -1364,7 +1372,7 @@ public class LibMatrixMult2
 				matrixMultSparseDenseMMSkinnyRHS(a, b, c, n, rl, ru);
 			}
 			else {                          //MATRIX-MATRIX
-				matrixMultSparseDenseMM(a, b, c, n, cd, xsp, rl, ru); //TODO
+				matrixMultSparseDenseMM(a, b, c, n, cd, xsp, rl, ru);
 			}
 		}
 		else {
@@ -3792,156 +3800,144 @@ public class LibMatrixMult2
 	}
 
 	//note: public for use by codegen for consistency
-	// 6-arg add function
-	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int bi, int ci, final int len) {
-		int j = 0;
-		int speciesLen = SPECIES.length();
-		int max = SPECIES.loopBound(len);
-		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
-		DoubleVector res, bAsVec;
-
-		// Rest loop to handle elements that don't fit into full vector size
-		for (; j < len % speciesLen; j++) {
-			c[ci+j] += aval * b[bi+j];
-		}
-
-		// Block-wise iterations
-		for (; j < max; j += speciesLen) {
-			res = DoubleVector.fromArray(SPECIES, c, ci + j); // Create DoubleVector res to compute on
-			bAsVec = DoubleVector.fromArray(SPECIES, b, bi + j); // Create a Vector containing doubles from Array b starting at bi+j
-			res = avalVec.fma(bAsVec, res); // Compute res' = aval * b + res
-			res.intoArray(c, ci + j); // Store res into c starting from ci+j
-		}
-	}
-
-	// TODO: Make it faster
-	//note: public for use by codegen for consistency
-	// 7-arg add function
-	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int[] bix, int bi, int ci, int len) {
-		int j = 0;
-		int speciesLen = SPECIES.length();
-		int max = SPECIES.loopBound(len);
-		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
-		DoubleVector bAsVec, res;
-
-		// Rest
-		for (; j < len % speciesLen; j++) {
-			c[ci + bix[bi + j]] += aval * b[bi + j];
-		}
-
-		// Block-wise iteration
-		for (; j < max; j += speciesLen) {
-			bAsVec = DoubleVector.fromArray(SPECIES, b, bi + j);
-			res = DoubleVector.fromArray(SPECIES, c, ci, bix, bi+j); // Gather values based on indexMap bix
-			res = avalVec.fma(bAsVec, res);
-			res.intoArray(c, ci, bix, bi+j); // Scatter the results back into the c array
+	public static void vectMultiplyAdd( final double aval, double[] b, double[] c, int bi, int ci, final int len )
+	{
+		final int bn = len%8;
+		
+		//rest, not aligned to 8-blocks
+		for( int j = 0; j < bn; j++, bi++, ci++)
+			c[ ci ] += aval * b[ bi ];
+		
+		//unrolled 8-block  (for better instruction-level parallelism)
+		for( int j = bn; j < len; j+=8, bi+=8, ci+=8) 
+		{
+			//read 64B cachelines of b and c
+			//compute c' = aval * b + c
+			//write back 64B cacheline of c = c'
+			c[ ci+0 ] += aval * b[ bi+0 ];
+			c[ ci+1 ] += aval * b[ bi+1 ];
+			c[ ci+2 ] += aval * b[ bi+2 ];
+			c[ ci+3 ] += aval * b[ bi+3 ];
+			c[ ci+4 ] += aval * b[ bi+4 ];
+			c[ ci+5 ] += aval * b[ bi+5 ];
+			c[ ci+6 ] += aval * b[ bi+6 ];
+			c[ ci+7 ] += aval * b[ bi+7 ];
 		}
 	}
 
 	private static void vectMultiplyAdd2( final double aval1, final double aval2, double[] b, double[] c, int bi1, int bi2, int ci, final int len )
 	{
-		int j = 0;
-		int max = SPECIES.loopBound(len);
-		int speciesLen = SPECIES.length();
-		DoubleVector res, b1AsVec, b2AsVec;
-
-		// Create DoubleVectors that only contains values aval1 and aval2 respectively
-		DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
-		DoubleVector aval2Vec = DoubleVector.broadcast(SPECIES, aval2);
-
-		// Rest
-		for(; j < len % speciesLen; j++) {
-			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j];
-		}
-
-		// Iterate block-wise
-		for(; j < max; j += speciesLen) {
-			res = DoubleVector.fromArray(SPECIES, c, ci + j);
-			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
-			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
-
-			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res => res = aval1 * b1 + aval2 * b2 + res
-			res.intoArray(c, ci+j);
+		final int bn = len%8;	
+		
+		//rest, not aligned to 8-blocks
+		for( int j = 0; j < bn; j++, bi1++, bi2++, ci++ )
+			c[ ci ] += aval1 * b[ bi1 ] + aval2 * b[ bi2 ];
+		
+		//unrolled 8-block  (for better instruction-level parallelism)
+		for( int j = bn; j < len; j+=8, bi1+=8, bi2+=8, ci+=8 ) 
+		{
+			//read 64B cachelines of b (2x) and c
+			//compute c' = aval_1 * b_1 + aval_2 * b_2 + c
+			//write back 64B cacheline of c = c'
+			c[ ci+0 ] += aval1 * b[ bi1+0 ] + aval2 * b[ bi2+0 ];
+			c[ ci+1 ] += aval1 * b[ bi1+1 ] + aval2 * b[ bi2+1 ];
+			c[ ci+2 ] += aval1 * b[ bi1+2 ] + aval2 * b[ bi2+2 ];
+			c[ ci+3 ] += aval1 * b[ bi1+3 ] + aval2 * b[ bi2+3 ];
+			c[ ci+4 ] += aval1 * b[ bi1+4 ] + aval2 * b[ bi2+4 ];
+			c[ ci+5 ] += aval1 * b[ bi1+5 ] + aval2 * b[ bi2+5 ];
+			c[ ci+6 ] += aval1 * b[ bi1+6 ] + aval2 * b[ bi2+6 ];
+			c[ ci+7 ] += aval1 * b[ bi1+7 ] + aval2 * b[ bi2+7 ];	
 		}
 	}
 
 	private static void vectMultiplyAdd3( final double aval1, final double aval2, final double aval3, double[] b, double[] c, int bi1, int bi2, int bi3, int ci, final int len )
 	{
-		int j = 0;
-		int max = SPECIES.loopBound(len);
-		int speciesLen = SPECIES.length();
-		DoubleVector res, b1AsVec, b2AsVec, b3AsVec;
-
-		// Create DoubleVectors that only contains values aval1, aval2 and aval3 respectively
-		DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
-		DoubleVector aval2Vec = DoubleVector.broadcast(SPECIES, aval2);
-		DoubleVector aval3Vec = DoubleVector.broadcast(SPECIES, aval3);
-
-		//Rest
-		for(; j < len % speciesLen; j++) {
-			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j] + aval3 * b[bi3 + j];
-		}
-
-		// Iterate block-wise
-		for(; j < max; j += speciesLen) {
-			res = DoubleVector.fromArray(SPECIES, c, ci + j);
-			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
-			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
-			b3AsVec = DoubleVector.fromArray(SPECIES, b, bi3 + j);
-
-			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res
-			res = aval3Vec.fma(b3AsVec, res); // compute res' = aval3 * b3 + res => same principle as above
-			res.intoArray(c, ci+j);
+		final int bn = len%8;	
+		
+		//rest, not aligned to 8-blocks
+		for( int j = 0; j < bn; j++, bi1++, bi2++, bi3++, ci++ )
+			c[ ci ] += aval1 * b[ bi1 ] + aval2 * b[ bi2 ] + aval3 * b[ bi3 ];
+		
+		//unrolled 8-block (for better instruction-level parallelism)
+		for( int j = bn; j < len; j+=8, bi1+=8, bi2+=8, bi3+=8, ci+=8 ) 
+		{
+			//read 64B cachelines of b (3x) and c
+			//compute c' = aval_1 * b_1 + aval_2 * b_2 + c
+			//write back 64B cacheline of c = c'
+			c[ ci+0 ] += aval1 * b[ bi1+0 ] + aval2 * b[ bi2+0 ] + aval3 * b[ bi3+0 ];
+			c[ ci+1 ] += aval1 * b[ bi1+1 ] + aval2 * b[ bi2+1 ] + aval3 * b[ bi3+1 ];
+			c[ ci+2 ] += aval1 * b[ bi1+2 ] + aval2 * b[ bi2+2 ] + aval3 * b[ bi3+2 ];
+			c[ ci+3 ] += aval1 * b[ bi1+3 ] + aval2 * b[ bi2+3 ] + aval3 * b[ bi3+3 ];
+			c[ ci+4 ] += aval1 * b[ bi1+4 ] + aval2 * b[ bi2+4 ] + aval3 * b[ bi3+4 ];
+			c[ ci+5 ] += aval1 * b[ bi1+5 ] + aval2 * b[ bi2+5 ] + aval3 * b[ bi3+5 ];
+			c[ ci+6 ] += aval1 * b[ bi1+6 ] + aval2 * b[ bi2+6 ] + aval3 * b[ bi3+6 ];
+			c[ ci+7 ] += aval1 * b[ bi1+7 ] + aval2 * b[ bi2+7 ] + aval3 * b[ bi3+7 ];	
 		}
 	}
 
 	private static void vectMultiplyAdd4( final double aval1, final double aval2, final double aval3, final double aval4, double[] b, double[] c, int bi1, int bi2, int bi3, int bi4, int ci, final int len )
 	{
-		int j = 0;
-		int max = SPECIES.loopBound(len);
-		int speciesLen = SPECIES.length();
-		DoubleVector res, b1AsVec, b2AsVec, b3AsVec, b4AsVec;
-
-		// Create DoubleVectors that only contains values aval1, aval2, aval3 and aval4 respectively
-		DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
-		DoubleVector aval2Vec = DoubleVector.broadcast(SPECIES, aval2);
-		DoubleVector aval3Vec = DoubleVector.broadcast(SPECIES, aval3);
-		DoubleVector aval4Vec = DoubleVector.broadcast(SPECIES, aval4);
-
-		// Rest
-		for(; j < len % speciesLen; j++) {
-			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j] + aval3 * b[bi3 + j] + aval4 * b[bi4 + j];
-		}
-
-		// Iterate block-wise
-		for(; j < max; j += speciesLen) {
-			res = DoubleVector.fromArray(SPECIES, c, ci+j);
-			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1+j);
-			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2+j);
-			b3AsVec = DoubleVector.fromArray(SPECIES, b, bi3+j);
-			b4AsVec = DoubleVector.fromArray(SPECIES, b, bi4+j);
-
-			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res
-			res = aval3Vec.fma(b3AsVec, res); // compute res' = aval3 * b3 + res
-			res = aval4Vec.fma(b4AsVec, res); // compute res' = aval4 * b4 + res => same principle as above
-			res.intoArray(c, ci+j);
+		final int bn = len%8;	
+		
+		//rest, not aligned to 8-blocks
+		for( int j = 0; j < bn; j++, bi1++, bi2++, bi3++, bi4++, ci++ )
+			c[ ci ] += aval1 * b[ bi1 ] + aval2 * b[ bi2 ] + aval3 * b[ bi3 ] + aval4 * b[ bi4 ];
+		
+		//unrolled 8-block  (for better instruction-level parallelism)
+		for( int j = bn; j < len; j+=8, bi1+=8, bi2+=8, bi3+=8, bi4+=8, ci+=8) 
+		{
+			//read 64B cachelines of b (4x) and c 
+			//compute c' = aval_1 * b_1 + aval_2 * b_2 + c
+			//write back 64B cacheline of c = c'
+			c[ ci+0 ] += aval1 * b[ bi1+0 ] + aval2 * b[ bi2+0 ] + aval3 * b[ bi3+0 ] + aval4 * b[ bi4+0 ];
+			c[ ci+1 ] += aval1 * b[ bi1+1 ] + aval2 * b[ bi2+1 ] + aval3 * b[ bi3+1 ] + aval4 * b[ bi4+1 ];
+			c[ ci+2 ] += aval1 * b[ bi1+2 ] + aval2 * b[ bi2+2 ] + aval3 * b[ bi3+2 ] + aval4 * b[ bi4+2 ];
+			c[ ci+3 ] += aval1 * b[ bi1+3 ] + aval2 * b[ bi2+3 ] + aval3 * b[ bi3+3 ] + aval4 * b[ bi4+3 ];
+			c[ ci+4 ] += aval1 * b[ bi1+4 ] + aval2 * b[ bi2+4 ] + aval3 * b[ bi3+4 ] + aval4 * b[ bi4+4 ];
+			c[ ci+5 ] += aval1 * b[ bi1+5 ] + aval2 * b[ bi2+5 ] + aval3 * b[ bi3+5 ] + aval4 * b[ bi4+5 ];
+			c[ ci+6 ] += aval1 * b[ bi1+6 ] + aval2 * b[ bi2+6 ] + aval3 * b[ bi3+6 ] + aval4 * b[ bi4+6 ];
+			c[ ci+7 ] += aval1 * b[ bi1+7 ] + aval2 * b[ bi2+7 ] + aval3 * b[ bi3+7 ] + aval4 * b[ bi4+7 ];	
 		}
 	}
-
+	
 	@SuppressWarnings("unused")
 	private static void vectMultiplyAdd( final double aval, double[] b, double[] c, int[] bix, final int ci, final int len )
 	{
 		final int bn = len%8;
-
+		
 		//rest, not aligned to 8-blocks
 		for( int j = 0; j < bn; j++ )
 			c[ ci + bix[j] ] += aval * b[ j ];
-
+		
 		//unrolled 8-block (for better instruction-level parallelism)
 		for( int j = bn; j < len; j+=8 )
+		{
+			//read 64B cacheline of b
+			//read 64B of c via 'gather'
+			//compute c' = aval * b + c
+			//write back 64B of c = c' via 'scatter'
+			c[ ci+bix[j+0] ] += aval * b[ j+0 ];
+			c[ ci+bix[j+1] ] += aval * b[ j+1 ];
+			c[ ci+bix[j+2] ] += aval * b[ j+2 ];
+			c[ ci+bix[j+3] ] += aval * b[ j+3 ];
+			c[ ci+bix[j+4] ] += aval * b[ j+4 ];
+			c[ ci+bix[j+5] ] += aval * b[ j+5 ];
+			c[ ci+bix[j+6] ] += aval * b[ j+6 ];
+			c[ ci+bix[j+7] ] += aval * b[ j+7 ];
+		}
+	}
+
+	//note: public for use by codegen for consistency
+	public static void vectMultiplyAdd( final double aval, double[] b, double[] c, int[] bix, final int bi, final int ci, final int len )
+	{
+		final int bn = len%8;
+
+		//rest, not aligned to 8-blocks
+		for( int j = bi; j < bi+bn; j++ )
+			c[ ci + bix[j] ] += aval * b[ j ];
+		
+		//unrolled 8-block (for better instruction-level parallelism)
+		for( int j = bi+bn; j < bi+len; j+=8 )
 		{
 			//read 64B cacheline of b
 			//read 64B of c via 'gather'
@@ -5037,9 +5033,3 @@ public class LibMatrixMult2
 		}
 	}
 }
-
-
-
-
-
-

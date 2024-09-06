@@ -15,7 +15,7 @@ public class MatrixMulSIMDPerformance {
     private static final String BASE_PATH = "vector_api_test/";
     private static final double EPSILON = 1E-10;
 
-    public static void squareMatrixSIMDTest(double sparsityMatrix1, double sparsityMatrix2, String kSteps, String nSteps, int warmUpIterations) {
+    public static void squareMMSIMDTest(double sparsityMatrix1, double sparsityMatrix2, String kSteps, String nSteps, int warmUpIterations) {
         String outputPath = BASE_PATH + "performance1_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_k=" + kSteps + "_n=" + nSteps + ".csv";
         long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
         double avg1 = 0.0, avg2 = 0.0, improvement = 0.0;
@@ -54,24 +54,24 @@ public class MatrixMulSIMDPerformance {
                     avg2 = 0;
 
                     for(int i = 0; i < 5; i++) {
-                        LibMatrixMult.matrixMult(mbA, mbB, k); // No SIMD
+                        LibMatrixMult2.matrixMult(mbA, mbB, k); // No SIMD
                     }
 
                     for(int i = 0; i < 10; i++) {
                         startTime1 = System.nanoTime();
-                        resultA = LibMatrixMult.matrixMult(mbA, mbB, k); // No SIMD
+                        resultA = LibMatrixMult2.matrixMult(mbA, mbB, k); // No SIMD
                         endTime1 = System.nanoTime();
 
                         avg1 += (endTime1 - startTime1) / 1000000;
                     }
 
                     for(int i = 0; i < 5; i++) {
-                        LibMatrixMult2.matrixMult(mbA, mbB, k); // SIMD
+                        LibMatrixMult.matrixMult(mbA, mbB, k); // SIMD
                     }
 
                     for(int i = 0; i < 10; i++) {
                         startTime2 = System.nanoTime();
-                        resultB = LibMatrixMult2.matrixMult(mbA, mbB, k); // SIMD
+                        resultB = LibMatrixMult.matrixMult(mbA, mbB, k); // SIMD
                         endTime2 = System.nanoTime();
 
                         avg2 += (endTime2 - startTime2) / 1000000;
@@ -96,11 +96,15 @@ public class MatrixMulSIMDPerformance {
         }
     }
 
-    public static void simdMultTestsStaticKDynamicN(double sparsityMatrix1, double sparsityMatrix2, int k, String stepStr) {
-        // Define the file path for the CSV output
-        String outputPath = BASE_PATH + "performance1_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_k=" + k + ".csv";
+    public static void MVSIMDTest(double sparsityMatrix1, double sparsityMatrix2, String kSteps, int rows, int cols, int warmUpIterations) {
+        if(cols > 2*1024) {
+            System.out.println("Illegal amount of columns. Must be <= 2*1024!");
+            return;
+        }
+
+        String outputPath = BASE_PATH + "performance2_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_k=" + kSteps + "_rows=" + rows + "_cols=" + cols + ".csv";
         long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
-        long avg1 = 0, avg2 = 0;
+        double avg1 = 0.0, avg2 = 0.0, improvement = 0.0;
         MatrixBlock resultA = null, resultB = null;
         boolean resEqual = false;
 
@@ -112,141 +116,60 @@ public class MatrixMulSIMDPerformance {
 
         try (FileWriter writer = new FileWriter(outputPath)) {
             // Write CSV header
-            writer.append("n,k,exec_time_no_simd,exec_time_simd\n");
+            writer.append("rows,cols,k,exec_time_no_simd,exec_time_simd,improvement\n");
 
-            // densedenseMM multiplication
-            int[] sizes = calculateSizes(stepStr);
-            for (int n : sizes) {
-                // Generate two random dense matrices
-                MatrixBlock mbA = MatrixBlock.randOperations(n, n, sparsityMatrix1, 0, 1, "uniform", 7);
-                MatrixBlock mbB = MatrixBlock.randOperations(n, n, sparsityMatrix2, 0, 1, "uniform", 7);
-                MatrixBlock warmUpA = MatrixBlock.randOperations(256, 256, sparsityMatrix1, 0, 1, "uniform", 7);
-                MatrixBlock warmUpB = MatrixBlock.randOperations(256, 256, sparsityMatrix2, 0, 1, "uniform", 7);
+            int[] kSizes = calculateSizes(kSteps);
 
-                // Measure the execution time of the matrix multiplication
-                avg1 = 0;
-                avg2 = 0;
+            MatrixBlock warmUpA = MatrixBlock.randOperations(300000, 2048, sparsityMatrix1, 0, 1, "uniform", 7);
+            MatrixBlock warmUpB = MatrixBlock.randOperations(2048, 1, sparsityMatrix2, 0, 1, "uniform", 7);
 
-                for(int i = 0; i < 25000; i++) {
-                    LibMatrixMult.matrixMult(warmUpA, warmUpB, k);
-                }
-
-                for(int i = 0; i < 5; i++) {
-                    resultA = LibMatrixMult.matrixMult(mbA, mbB, k);
-                }
-
-                for(int i = 0; i < 10; i++) {
-                    startTime1 = System.nanoTime();
-                    LibMatrixMult.matrixMult(mbA, mbB, k); // No SIMD
-                    endTime1 = System.nanoTime();
-
-                    avg1 += (endTime1 - startTime1) / 1000000;
-                }
-
-                for(int i = 0; i < 25000; i++) {
-                    LibMatrixMult2.matrixMult(warmUpA, warmUpB, k);
-                }
-
-                for(int i = 0; i < 5; i++) {
-                    resultB = LibMatrixMult2.matrixMult(mbA, mbB, k);
-                }
-
-                for(int i = 0; i < 10; i++) {
-                    startTime2 = System.nanoTime();
-                    LibMatrixMult2.matrixMult(mbA, mbB, k); // SIMD
-                    endTime2 = System.nanoTime();
-
-                    avg2 += (endTime2 - startTime2) / 1000000;
-                }
-
-                resEqual = compareResults(resultA, resultB, n, n);
-
-                System.out.println("Averages - NO-SIMD: " + (double) avg1/10
-                        + "; SIMD: " + (double) avg2/10
-                        + "; n=" + n
-                        + "; k=" + k);
-                System.out.println("Results are equal: " + resEqual);
-                System.out.println("------------------");
-                // Write to csv
-                writer.append(n + "," + k + "," + avg1/10 + "," + avg2/10 + "\n");
+            for(int i = 0; i < warmUpIterations; i++) {
+                LibMatrixMult.matrixMult(warmUpA, warmUpB, kSizes[0]);
+                LibMatrixMult2.matrixMult(warmUpA, warmUpB, kSizes[0]);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
 
-    public static void simdMultTestsDynamicKStaticN(double sparsityMatrix1, double sparsityMatrix2, int n, String stepStr) {
-        // Define the file path for the CSV output
-        String outputPath = BASE_PATH + "performance2_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_n=" + n + ".csv";
-        long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
-        long avg1 = 0, avg2 = 0;
-        MatrixBlock resultA = null, resultB = null;
-        boolean resEqual = false;
+            for (int k : kSizes) {
+				// Generate two random dense matrices
+				MatrixBlock mbA = MatrixBlock.randOperations(rows, cols, sparsityMatrix1, 0, 1, "uniform", 7);
+				MatrixBlock mbB = MatrixBlock.randOperations(cols, 1, sparsityMatrix2, 0, 1, "uniform", 7);
 
-        try {
-            Files.createDirectories(Paths.get(BASE_PATH));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+				// Measure the execution time of the matrix multiplication
+				avg1 = 0;
+				avg2 = 0;
 
-        try (FileWriter writer = new FileWriter(outputPath)) {
-            // Write CSV header
-            writer.append("n,k,exec_time_no_simd,exec_time_simd\n");
+				for(int i = 0; i < 5; i++) {
+					LibMatrixMult2.matrixMult(mbA, mbB, k); // No SIMD
+				}
 
-            int[] threadAmount = calculateSizes(stepStr);
-            for (int k : threadAmount) {
-                // Generate two random dense matrices
-                MatrixBlock mbA = MatrixBlock.randOperations(n, n, sparsityMatrix1, 0, 1, "uniform", 7);
-                MatrixBlock mbB = MatrixBlock.randOperations(n, n, sparsityMatrix2, 0, 1, "uniform", 7);
-                MatrixBlock warmUpA = MatrixBlock.randOperations(256, 256, sparsityMatrix1, 0, 1, "uniform", 7);
-                MatrixBlock warmUpB = MatrixBlock.randOperations(256, 256, sparsityMatrix2, 0, 1, "uniform", 7);
+				for(int i = 0; i < 10; i++) {
+					startTime1 = System.nanoTime();
+					resultA = LibMatrixMult2.matrixMult(mbA, mbB, k); // No SIMD
+					endTime1 = System.nanoTime();
 
-                // Measure the execution time of the matrix multiplication
-                avg1 = 0;
-                avg2 = 0;
+					avg1 += (endTime1 - startTime1) / 1000000;
+				}
 
-                for(int i = 0; i < 25000; i++) {
-                    LibMatrixMult.matrixMult(warmUpA, warmUpB, k);
-                }
+				for(int i = 0; i < 5; i++) {
+					LibMatrixMult.matrixMult(mbA, mbB, k); // SIMD
+				}
 
-                for(int i = 0; i < 5; i++) {
-                    resultA = LibMatrixMult.matrixMult(mbA, mbB, k);
-                }
+				for(int i = 0; i < 10; i++) {
+					startTime2 = System.nanoTime();
+					resultB = LibMatrixMult.matrixMult(mbA, mbB, k); // SIMD
+					endTime2 = System.nanoTime();
 
-                for(int i = 0; i < 10; i++) {
-                    startTime1 = System.nanoTime();
-                    LibMatrixMult.matrixMult(mbA, mbB, k); // No SIMD
-                    endTime1 = System.nanoTime();
+					avg2 += (endTime2 - startTime2) / 1000000;
+				}
 
-                    avg1 += (endTime1 - startTime1) / 1000000;
-                }
+				resEqual = compareResults(resultA, resultB, resultA.getNumRows(), resultA.getNumColumns());
+				improvement = Math.round(((avg1 - avg2) / avg1) * 100.0 * 100.0) / 100.0;
 
-                for(int i = 0; i < 25000; i++) {
-                    LibMatrixMult2.matrixMult(warmUpA, warmUpB, k);
-                }
-
-                for(int i = 0; i < 5; i++) {
-                    resultB = LibMatrixMult2.matrixMult(mbA, mbB, k);
-                }
-
-                for(int i = 0; i < 10; i++) {
-                    startTime2 = System.nanoTime();
-                    LibMatrixMult2.matrixMult(mbA, mbB, k); // SIMD
-                    endTime2 = System.nanoTime();
-
-                    avg2 += (endTime2 - startTime2) / 1000000;
-                }
-
-                resEqual = compareResults(resultA, resultB, n, n);
-
-                System.out.println("Averages - NO-SIMD: " + (double) avg1/10
-                                                + "; SIMD: " + (double) avg2/10
-                                                + "; n=" + n
-                                                + "; k=" + k);
-                System.out.println("Results are equal: " + resEqual);
-                System.out.println("------------------");
-                // Write to csv
-                writer.append(n + "," + k + "," + avg1/10 + "," + avg2/10 + "\n");
+				System.out.println("Averages - NO-SIMD: " + avg1 / 10 + "; SIMD: " + avg2 / 10 + "; rows=" + rows + "; cols=" + cols + "; k=" + k
+					+ "; Improvement: " + improvement + "%");
+				System.out.println("Results are equal: " + resEqual);
+				System.out.println("------------------");
+				// Write to csv
+				writer.append(rows + "," + cols + "," + k + "," + avg1 / 10 + "," + avg2 / 10 + "," + improvement + "\n");
             }
         } catch (IOException e) {
             e.printStackTrace();
