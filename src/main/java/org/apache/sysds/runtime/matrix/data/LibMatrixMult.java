@@ -3707,8 +3707,8 @@ public class LibMatrixMult
 		double val = 0;
 		int i = 0;
 		int speciesLen = SPECIES.length();
-		final int bn = len % speciesLen;
-		DoubleVector aVector, bVector;
+		int bn = len % speciesLen;
+		DoubleVector aAsVec, bAsVec;
 		
 		//compute rest
 		for(; i < bn; i++)
@@ -3717,9 +3717,11 @@ public class LibMatrixMult
 		//Block-wise iteration
 		for(; i < len; i+= speciesLen)
 		{
-			aVector = DoubleVector.fromArray(SPECIES, a, ai+i);
-			bVector = DoubleVector.fromArray(SPECIES, b, bi+i);
-			val += aVector.mul(bVector).reduceLanes(VectorOperators.ADD);
+			aAsVec = DoubleVector.fromArray(SPECIES, a, ai+i);
+			bAsVec = DoubleVector.fromArray(SPECIES, b, bi+i);
+			val += aAsVec.mul(bAsVec).reduceLanes(VectorOperators.ADD);
+			//aAsVec.mul(bAsVec); //TODO: Remove
+			//val += 1;
 		}
 
 		return val; 
@@ -3732,8 +3734,8 @@ public class LibMatrixMult
 		double val = 0;
 		int i = ai;
 		int speciesLen = SPECIES.length();
-		final int bn = len % speciesLen;
-		DoubleVector aVector, bVector;
+		int bn = len % speciesLen;
+		DoubleVector aAsVec, bAsVec;
 				
 		//compute rest
 		for(; i < ai+bn; i++ )
@@ -3742,9 +3744,11 @@ public class LibMatrixMult
 		//Block-wise iteration
 		for(; i < ai+len; i+=speciesLen )
 		{
-			aVector = DoubleVector.fromArray(SPECIES, a, i);
-			bVector = DoubleVector.fromArray(SPECIES, b, bi, aix, i);
-			val += aVector.mul(bVector).reduceLanes(VectorOperators.ADD);
+			aAsVec = DoubleVector.fromArray(SPECIES, a, i);
+			bAsVec = DoubleVector.fromArray(SPECIES, b, bi, aix, i);
+			val += aAsVec.mul(bAsVec).reduceLanes(VectorOperators.ADD);
+			//aAsVec.mul(bAsVec); //TODO: Remove
+			//val += 1;
 		}
 		
 		//scalar result
@@ -3782,7 +3786,6 @@ public class LibMatrixMult
 	}
 
 	//note: public for use by codegen for consistency
-	// 6-arg add function
 	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int bi, int ci, final int len) {
 		int j = 0;
 		int speciesLen = SPECIES.length();
@@ -3803,9 +3806,7 @@ public class LibMatrixMult
 		}
 	}
 
-	// TODO: Make it faster
 	//note: public for use by codegen for consistency
-	// 7-arg add function
 	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int[] bix, int bi, int ci, int len) {
 		int j = bi;
 		int speciesLen = SPECIES.length();

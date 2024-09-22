@@ -1,14 +1,25 @@
 package org.apache.sysds.performance.matrix;
 
+import org.apache.commons.math3.analysis.function.Exp;
+import org.apache.sysds.runtime.functionobjects.Minus;
+import org.apache.sysds.runtime.functionobjects.Multiply;
+import org.apache.sysds.runtime.functionobjects.Power;
+import org.apache.sysds.runtime.functionobjects.Power2;
+import org.apache.sysds.runtime.matrix.data.LibMatrixBincell;
 import org.apache.sysds.runtime.matrix.data.LibMatrixMult;
 import org.apache.sysds.runtime.matrix.data.LibMatrixMult2;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
+import org.apache.sysds.runtime.matrix.operators.BinaryOperator;
+import org.apache.sysds.runtime.matrix.operators.ScalarOperator;
+import org.apache.sysds.runtime.matrix.operators.UnaryOperator;
 
 import java.io.FileWriter;
 import java.io.IOException;
 
 import java.nio.file.Paths;
 import java.nio.file.Files;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class MatrixMulSIMDPerformance {
 
@@ -16,7 +27,7 @@ public class MatrixMulSIMDPerformance {
     private static final double EPSILON = 1E-10;
 
     public static void squareMMSIMDTest(double sparsityMatrix1, double sparsityMatrix2, String kSteps, String nSteps, int warmUpIterations) {
-        String outputPath = BASE_PATH + "performance1_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_k=" + kSteps + "_n=" + nSteps + ".csv";
+        String outputPath = BASE_PATH + "performance1_" + getTimeStamp() + ".csv";
         long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
         double avg1 = 0.0, avg2 = 0.0, improvement = 0.0;
         MatrixBlock resultA = null, resultB = null;
@@ -102,7 +113,7 @@ public class MatrixMulSIMDPerformance {
             return;
         }
 
-        String outputPath = BASE_PATH + "performance2_" + sparsityMatrix1 + "_" + sparsityMatrix2 + "_k=" + kSteps + "_rows=" + rows + "_cols=" + cols + ".csv";
+        String outputPath = BASE_PATH + "performance2_" + getTimeStamp() + ".csv";
         long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
         double avg1 = 0.0, avg2 = 0.0, improvement = 0.0;
         MatrixBlock resultA = null, resultB = null;
@@ -176,6 +187,22 @@ public class MatrixMulSIMDPerformance {
         }
     }
 
+    public static void diffExpPowerTest() {
+        MatrixBlock A = MatrixBlock.randOperations(2, 2, 1, 0, 1, "uniform", 7);
+        MatrixBlock B = MatrixBlock.randOperations(2, 2, 1, 0, 1, "uniform", 8);
+        MatrixBlock minusC = new MatrixBlock(A.getNumRows(), A.getNumColumns(), false);
+        MatrixBlock powerC = new MatrixBlock(A.getNumRows(), A.getNumColumns(), false);
+        MatrixBlock expC = new MatrixBlock(A.getNumRows(), A.getNumColumns(), false);
+
+        LibMatrixBincell.bincellOp(A, B, minusC, new BinaryOperator(Minus.getMinusFnObject()));
+        LibMatrixBincell.uncellOp(A, powerC, new UnaryOperator(Power2.getPower2FnObject()));
+        System.out.println("A: " + A);
+        System.out.println("B: " + B);
+        System.out.println("C Minus: " + minusC);
+        System.out.println("C Power: " + powerC);
+        System.out.println("C Exp: " + expC);
+    }
+
     /**
      *
      * @param stepStr
@@ -202,6 +229,13 @@ public class MatrixMulSIMDPerformance {
             sizes[i] = start+step*i;
         }
         return sizes;
+    }
+
+    public static String getTimeStamp() {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss");
+        String formattedNow = now.format(formatter);
+        return formattedNow;
     }
 
     public static boolean compareResults(MatrixBlock mb1, MatrixBlock mb2, int rows, int cols) {

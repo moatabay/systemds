@@ -24,4 +24,8 @@
    <sysds.federated.initialization.timeout>2</sysds.federated.initialization.timeout>
    <!-- The timeout of each instruction sent to federated workers -->
    <sysds.federated.timeout>128</sysds.federated.timeout>
+
+   <sysds.optlevel>4</sysds.optlevel>
+
+   <sysds.native.blas>mkl</sysds.native.blas>
 </root>

@@ -133,6 +133,9 @@ public class Main {
 			case 1006:
 				run1006(args);
 				break;
+			case 1007:
+				run1007(args);
+				break;
 			default:
 				break;
 		}
@@ -360,6 +363,10 @@ public class Main {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	private static void run1007(String[] args) {
+		diffExpPowerTest();
 	}
 
 	public static void main(String[] args) {
