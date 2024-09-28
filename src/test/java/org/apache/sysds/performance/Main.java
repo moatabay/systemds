@@ -345,6 +345,7 @@ public class Main {
 	}
 
 	private static void run1005(String[] args) {
+
 		if(args.length == 6) {
 			try {
 				squareMMSIMDTest(Double.parseDouble(args[1]), Double.parseDouble(args[2]), args[3], args[4], Integer.parseInt(args[5]));

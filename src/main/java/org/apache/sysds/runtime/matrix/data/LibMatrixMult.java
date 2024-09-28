@@ -3810,7 +3810,7 @@ public class LibMatrixMult
 	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int[] bix, int bi, int ci, int len) {
 		int j = bi;
 		int speciesLen = SPECIES.length();
-		final int bn = len % speciesLen;
+		int bn = len % speciesLen;
 		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
 		DoubleVector bAsVec, res;
 

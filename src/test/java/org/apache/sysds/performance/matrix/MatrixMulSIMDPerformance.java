@@ -1,14 +1,8 @@
 package org.apache.sysds.performance.matrix;
 
 import org.apache.commons.math3.analysis.function.Exp;
-import org.apache.sysds.runtime.functionobjects.Minus;
-import org.apache.sysds.runtime.functionobjects.Multiply;
-import org.apache.sysds.runtime.functionobjects.Power;
-import org.apache.sysds.runtime.functionobjects.Power2;
-import org.apache.sysds.runtime.matrix.data.LibMatrixBincell;
-import org.apache.sysds.runtime.matrix.data.LibMatrixMult;
-import org.apache.sysds.runtime.matrix.data.LibMatrixMult2;
-import org.apache.sysds.runtime.matrix.data.MatrixBlock;
+import org.apache.sysds.runtime.functionobjects.*;
+import org.apache.sysds.runtime.matrix.data.*;
 import org.apache.sysds.runtime.matrix.operators.BinaryOperator;
 import org.apache.sysds.runtime.matrix.operators.ScalarOperator;
 import org.apache.sysds.runtime.matrix.operators.UnaryOperator;
@@ -27,11 +21,11 @@ public class MatrixMulSIMDPerformance {
     private static final double EPSILON = 1E-10;
 
     public static void squareMMSIMDTest(double sparsityMatrix1, double sparsityMatrix2, String kSteps, String nSteps, int warmUpIterations) {
-        String outputPath = BASE_PATH + "performance1_" + getTimeStamp() + ".csv";
-        long startTime1 = 0, endTime1 = 0, startTime2 = 0, endTime2 = 0;
-        double avg1 = 0.0, avg2 = 0.0, improvement = 0.0;
+        String outputPath = BASE_PATH + "performance1_" + getTimeStamp() + "_s1=" + sparsityMatrix1 + "_s2=" + sparsityMatrix2 + ".csv";
+        long startTime1, endTime1, startTime2, endTime2, startTime3, endTime3;
+        double avg1, avg2, avg3, improvement;
         MatrixBlock resultA = null, resultB = null;
-        boolean resEqual = false;
+        boolean resEqual;
 
         try {
             Files.createDirectories(Paths.get(BASE_PATH));
@@ -41,17 +35,19 @@ public class MatrixMulSIMDPerformance {
 
         try (FileWriter writer = new FileWriter(outputPath)) {
             // Write CSV header
-            writer.append("n,k,exec_time_no_simd,exec_time_simd,improvement\n");
+            writer.append("n,k,exec_time_no_simd,exec_time_simd,exec_time_mkl,improvement\n");
 
             int[] kSizes = calculateSizes(kSteps);
             int[] nSizes = calculateSizes(nSteps);
 
             MatrixBlock warmUpA = MatrixBlock.randOperations(2000, 2000, sparsityMatrix1, 0, 1, "uniform", 7);
             MatrixBlock warmUpB = MatrixBlock.randOperations(2000, 2000, sparsityMatrix2, 0, 1, "uniform", 7);
+            MatrixBlock warmUpRet = new MatrixBlock(warmUpA.getNumRows(), warmUpB.getNumColumns(), false);
 
             for(int i = 0; i < warmUpIterations; i++) {
                 LibMatrixMult.matrixMult(warmUpA, warmUpB, kSizes[0]);
                 LibMatrixMult2.matrixMult(warmUpA, warmUpB, kSizes[0]);
+                LibMatrixNative.matrixMult(warmUpA, warmUpB, warmUpRet, kSizes[0]);
             }
 
             for (int k : kSizes) {
@@ -59,10 +55,12 @@ public class MatrixMulSIMDPerformance {
                     // Generate two random dense matrices
                     MatrixBlock mbA = MatrixBlock.randOperations(n, n, sparsityMatrix1, 0, 1, "uniform", 7);
                     MatrixBlock mbB = MatrixBlock.randOperations(n, n, sparsityMatrix2, 0, 1, "uniform", 7);
+                    MatrixBlock ret = new MatrixBlock(mbA.getNumRows(),mbB.getNumColumns(), false);
 
                     // Measure the execution time of the matrix multiplication
                     avg1 = 0;
                     avg2 = 0;
+                    avg3 = 0;
 
                     for(int i = 0; i < 5; i++) {
                         LibMatrixMult2.matrixMult(mbA, mbB, k); // No SIMD
@@ -88,18 +86,35 @@ public class MatrixMulSIMDPerformance {
                         avg2 += (endTime2 - startTime2) / 1000000;
                     }
 
+                    // TODO: Call libmatrixnative, that will call mkl
+                    for(int i = 0; i < 5; i++) {
+                        LibMatrixNative.matrixMult(mbA, mbB, ret, k);
+                    }
+
+                    for(int i = 0; i < 5; i++) {
+                        startTime3 = System.nanoTime();
+                        LibMatrixNative.matrixMult(mbA, mbB, ret, k);
+                        endTime3 = System.nanoTime();
+
+                        avg3 += (endTime3 - startTime3) / 1000000;
+                    }
+
+
                     resEqual = compareResults(resultA, resultB, n, n);
-                    improvement = Math.round(((avg1-avg2)/avg1)*100.0 * 100.0) / 100.0;
+                    resEqual = compareResults(resultA, ret, resultA.getNumRows(), resultA.getNumColumns());
+
+                    improvement = Math.round(((avg1-avg2)/avg1)*100.0 * 100.0) / 100.0; // Improvement NO-SIMD to SIMD
 
                     System.out.println("Averages - NO-SIMD: " + avg1/10
                             + "; SIMD: " + avg2/10
+                            + "; MKL: " + avg3/10
                             + "; n=" + n
                             + "; k=" + k
                             + "; Improvement: " + improvement + "%");
                     System.out.println("Results are equal: " + resEqual);
                     System.out.println("------------------");
                     // Write to csv
-                    writer.append(n + "," + k + "," + avg1/10 + "," + avg2/10 + "," + improvement + "\n");
+                    writer.append(n + "," + k + "," + avg1/10 + "," + avg2/10 + "," + avg3/10 + "," + improvement + "\n");
                 }
             }
         } catch (IOException e) {
@@ -188,19 +203,25 @@ public class MatrixMulSIMDPerformance {
     }
 
     public static void diffExpPowerTest() {
-        MatrixBlock A = MatrixBlock.randOperations(2, 2, 1, 0, 1, "uniform", 7);
-        MatrixBlock B = MatrixBlock.randOperations(2, 2, 1, 0, 1, "uniform", 8);
+        MatrixBlock A = MatrixBlock.randOperations(8000, 8000, 1, 0, 1, "uniform", 7);
+        MatrixBlock B = MatrixBlock.randOperations(A.getNumRows(), A.getNumColumns(), 1, 0, 1, "uniform", 8);
         MatrixBlock minusC = new MatrixBlock(A.getNumRows(), A.getNumColumns(), false);
+        MatrixBlock minusCSIMD = MatrixBlock.randOperations(A.getNumRows(), A.getNumColumns(), 1, 0, 1, "uniform", 9);
         MatrixBlock powerC = new MatrixBlock(A.getNumRows(), A.getNumColumns(), false);
         MatrixBlock expC = new MatrixBlock(A.getNumRows(), A.getNumColumns(), false);
 
+
         LibMatrixBincell.bincellOp(A, B, minusC, new BinaryOperator(Minus.getMinusFnObject()));
         LibMatrixBincell.uncellOp(A, powerC, new UnaryOperator(Power2.getPower2FnObject()));
-        System.out.println("A: " + A);
-        System.out.println("B: " + B);
-        System.out.println("C Minus: " + minusC);
-        System.out.println("C Power: " + powerC);
-        System.out.println("C Exp: " + expC);
+        //Builtin.getBuiltinFnObject()
+        LibMatrixDiffExpPow2.diff(A, B, minusCSIMD);
+        System.out.println(compareResults(minusC, minusCSIMD, minusC.getNumRows(), minusC.getNumColumns()));
+
+//        System.out.println("A: " + A);
+//        System.out.println("B: " + B);
+//        System.out.println("C Minus: " + minusC);
+//        System.out.println("C Power: " + powerC);
+//        System.out.println("C Exp: " + expC);
     }
 
     /**

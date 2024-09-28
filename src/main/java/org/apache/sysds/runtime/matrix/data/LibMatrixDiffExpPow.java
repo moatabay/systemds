@@ -3,6 +3,7 @@ package org.apache.sysds.runtime.matrix.data;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.apache.sysds.runtime.data.DenseBlock;
 
 public class LibMatrixDiffExpPow {
 
@@ -20,6 +21,7 @@ public class LibMatrixDiffExpPow {
 //        int cols = matrix.getNumColumns();
 //
 //        MatrixBlock ret = new MatrixBlock();
+//        DenseBlock block = matrix.getDenseBlock();
 //
 //        for (int i = 0; i < rows; i++) {
 //            int j = 0;
