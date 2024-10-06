@@ -3709,22 +3709,20 @@ public class LibMatrixMult
 		int speciesLen = SPECIES.length();
 		int bn = len % speciesLen;
 		DoubleVector aAsVec, bAsVec;
-		
+
 		//compute rest
 		for(; i < bn; i++)
 			val += a[ ai+i ] * b[ bi+i ];
-		
+
 		//Block-wise iteration
 		for(; i < len; i+= speciesLen)
 		{
 			aAsVec = DoubleVector.fromArray(SPECIES, a, ai+i);
 			bAsVec = DoubleVector.fromArray(SPECIES, b, bi+i);
 			val += aAsVec.mul(bAsVec).reduceLanes(VectorOperators.ADD);
-			//aAsVec.mul(bAsVec); //TODO: Remove
-			//val += 1;
 		}
 
-		return val; 
+		return val;
 	}
 
 	//TODO:SIMD
@@ -3736,23 +3734,21 @@ public class LibMatrixMult
 		int speciesLen = SPECIES.length();
 		int bn = len % speciesLen;
 		DoubleVector aAsVec, bAsVec;
-				
+
 		//compute rest
 		for(; i < ai+bn; i++ )
 			val += a[ i ] * b[ bi+aix[i] ];
-		
+
 		//Block-wise iteration
 		for(; i < ai+len; i+=speciesLen )
 		{
 			aAsVec = DoubleVector.fromArray(SPECIES, a, i);
 			bAsVec = DoubleVector.fromArray(SPECIES, b, bi, aix, i);
 			val += aAsVec.mul(bAsVec).reduceLanes(VectorOperators.ADD);
-			//aAsVec.mul(bAsVec); //TODO: Remove
-			//val += 1;
 		}
-		
+
 		//scalar result
-		return val; 
+		return val;
 	}
 	
 	private static double dotProduct(double[] a, int[] aix, final int apos, final int alen, double[] b, int bix[], final int bpos, final int blen) {

@@ -45,6 +45,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 
+import static org.apache.sysds.performance.matrix.MatrixElementWiseSIMDPerformance.diffExpPowerTest;
 import static org.apache.sysds.performance.matrix.MatrixMulSIMDPerformance.*;
 
 public class Main {
@@ -129,9 +130,6 @@ public class Main {
 				break;
 			case 1005:
 				run1005(args);
-				break;
-			case 1006:
-				run1006(args);
 				break;
 			case 1007:
 				run1007(args);
@@ -345,24 +343,18 @@ public class Main {
 	}
 
 	private static void run1005(String[] args) {
+		double sparsity1 = Double.parseDouble(args[1]);
+		double sparsity2 = Double.parseDouble(args[2]);
+		String rows1 = args[3];
+		String cols1 = args[4];
+		String cols2 = args[5];
+		int k = Integer.parseInt(args[6]);
+		int warmupIterations = Integer.parseInt(args[7]);
 
-		if(args.length == 6) {
-			try {
-				squareMMSIMDTest(Double.parseDouble(args[1]), Double.parseDouble(args[2]), args[3], args[4], Integer.parseInt(args[5]));
-			} catch (NumberFormatException e) {
-				e.printStackTrace();
-			}
-		}
-	}
-
-	private static void run1006(String[] args) {
-		if(args.length == 7) {
-			try {
-				MVSIMDTest(Double.parseDouble(args[1]), Double.parseDouble(args[2]), args[3],
-						Integer.parseInt(args[4]), Integer.parseInt(args[5]), Integer.parseInt(args[6]));
-			} catch (NumberFormatException e) {
-				e.printStackTrace();
-			}
+		try {
+			matrixMultTest(sparsity1, sparsity2, rows1, cols1, cols2, k, warmupIterations);
+		} catch (NumberFormatException e) {
+			e.printStackTrace();
 		}
 	}
 

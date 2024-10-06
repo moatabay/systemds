@@ -18,4 +18,5 @@
 -->
 
 <root>
+    <sysds.native.blas>mkl</sysds.native.blas>
 </root>
