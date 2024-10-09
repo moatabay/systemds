@@ -45,7 +45,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 
-import static org.apache.sysds.performance.matrix.MatrixElementWiseSIMDPerformance.diffExpPowerTest;
 import static org.apache.sysds.performance.matrix.MatrixMulSIMDPerformance.*;
 
 public class Main {
@@ -128,11 +127,17 @@ public class Main {
 			case 1004:
 				run1004(args);
 				break;
-			case 1005:
-				run1005(args);
+			case 2000:
+				run2000(args);
 				break;
-			case 1007:
-				run1007(args);
+			case 2001:
+				run2001(args);
+				break;
+			case 2002:
+				run2002(args);
+				break;
+			case 2003:
+				run2003(args);
 				break;
 			default:
 				break;
@@ -342,7 +347,8 @@ public class Main {
 		new SparseAppend(args);
 	}
 
-	private static void run1005(String[] args) {
+	private static void run2000(String[] args) {
+		// Matrix mult test
 		double sparsity1 = Double.parseDouble(args[1]);
 		double sparsity2 = Double.parseDouble(args[2]);
 		String rows1 = args[3];
@@ -358,8 +364,39 @@ public class Main {
 		}
 	}
 
-	private static void run1007(String[] args) {
-		diffExpPowerTest();
+	private static void run2001(String[] args) {
+		// Matrix diff test
+		double sparsity1 = Double.parseDouble(args[1]);
+		double sparsity2 = Double.parseDouble(args[2]);
+		String rows = args[3];
+		String cols = args[4];
+		int k = Integer.parseInt(args[5]);
+		int warmupRuns = Integer.parseInt(args[6]);
+
+		matrixDiffTest(sparsity1, sparsity2, rows, cols, k, warmupRuns);
+	}
+
+	private static void run2002(String[] args) {
+		// Matrix Power test
+		double sparsity = Double.parseDouble(args[1]);
+		String rows = args[2];
+		String cols = args[3];
+		double exponent = Double.parseDouble(args[4]);
+		int k = Integer.parseInt(args[5]);
+		int warmupRuns = Integer.parseInt(args[6]);
+
+		matrixPowerTest(sparsity, rows, cols, exponent, k, warmupRuns);
+	}
+
+	private static void run2003(String[] args) {
+		// Matrix Exp test
+		double sparsity = Double.parseDouble(args[1]);
+		String rows = args[2];
+		String cols = args[3];
+		int k = Integer.parseInt(args[4]);
+		int warmupRuns = Integer.parseInt(args[5]);
+
+		matrixExpTest(sparsity, rows, cols, k, warmupRuns);
 	}
 
 	public static void main(String[] args) {

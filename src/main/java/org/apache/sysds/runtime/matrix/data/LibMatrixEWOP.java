@@ -3,6 +3,7 @@ package org.apache.sysds.runtime.matrix.data;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.apache.sysds.runtime.data.SparseBlock;
 
 public class LibMatrixEWOP {
 
@@ -19,11 +20,11 @@ public class LibMatrixEWOP {
         }
     }
 
-    public static void expSparse(MatrixBlock a, MatrixBlock ret) {
+    private static void expSparse(MatrixBlock a, MatrixBlock ret) {
         //TODO
     }
 
-    public static void expDense(MatrixBlock a, MatrixBlock ret) {
+    private static void expDense(MatrixBlock a, MatrixBlock ret) {
         double[] aVals = a.getDenseBlockValues();
         double[] retVals = ret.getDenseBlockValues();
         int len = aVals.length;
@@ -37,7 +38,7 @@ public class LibMatrixEWOP {
         }
 
         // Vectorized iteration
-        for (; i <= SPECIES.loopBound(len); i += specLen) {
+        for (; i < SPECIES.loopBound(len); i += specLen) {
             aVec = DoubleVector.fromArray(SPECIES, aVals, i);
             aVec.lanewise(VectorOperators.EXP).intoArray(retVals, i);
         }
@@ -51,11 +52,51 @@ public class LibMatrixEWOP {
         }
     }
 
-    public static void powerSparse(MatrixBlock a, MatrixBlock ret, double exponent) {
-        //TODO
+    private static void powerSparse(MatrixBlock a, MatrixBlock ret, double exponent) {
+//        ret.allocateSparseRowsBlock();
+//
+//        SparseBlock blockA = a.getSparseBlock();
+//        SparseBlock blockRet = a.getSparseBlock();
+//
+//        int ru = a.getNumRows();
+//        int specLen = SPECIES.length();
+//
+//        // Iterate over all rows
+//        for (int r = 0; r < ru; r++) {
+//            if (blockA.isEmpty(r)) continue;
+//
+//            int apos = blockA.pos(r);
+//            int alen = blockA.size(r);
+//            int[] aix = blockA.indexes(r);
+//            double[] avals = blockA.values(r);
+//            DoubleVector aVec;
+//
+//            int i = 0;
+//
+//            // Rest
+//            for (; i < alen % specLen; i++) {
+//                blockRet[i] = Math.pow(aVals[i], exponent);
+//            }
+//
+//            // Vectorized iteration
+//            for (; i <= SPECIES.loopBound(len); i += specLen) {
+//                aVec = DoubleVector.fromArray(SPECIES, aVals, i);
+//                aVec.lanewise(VectorOperators.POW, exponent).intoArray(retVals, i);
+//            }
+//
+//            double val = values[pos + j];
+//            int col = indexes[pos + j];
+//
+//            double result = Math.pow(val, exponent);
+//
+//            ret.setValueSparseUnsafe(r, col, result);
+//        }
+//
+//        // Set the number of non-zeros in the result matrix
+//        ret.setNonZeros(a.getNonZeros());
     }
 
-    public static void powerDense(MatrixBlock a, MatrixBlock ret, double exponent) {
+    private static void powerDense(MatrixBlock a, MatrixBlock ret, double exponent) {
         double[] aVals = a.getDenseBlockValues(); // Input matrix
         double[] retVals = ret.getDenseBlockValues(); // Output matrix
         int len = aVals.length;
@@ -72,12 +113,11 @@ public class LibMatrixEWOP {
         }
 
         // Vectorized iteration
-        for (; i <= SPECIES.loopBound(len); i += specLen) {
+        for (; i < SPECIES.loopBound(len); i += specLen) {
             aVec = DoubleVector.fromArray(SPECIES, aVals, i);
             aVec.lanewise(VectorOperators.POW, exponent).intoArray(retVals, i);
         }
     }
-
 
     public static void diff(MatrixBlock a, MatrixBlock b, MatrixBlock ret) {
         if(a.sparse || b.sparse) {
@@ -106,7 +146,7 @@ public class LibMatrixEWOP {
         }
 
         // Vectorized iteration
-        for (; i <= SPECIES.loopBound(len); i += specLen) {
+        for (; i < SPECIES.loopBound(len); i += specLen) {
             aAsVec = DoubleVector.fromArray(SPECIES, dataA, i);
             bAsVec = DoubleVector.fromArray(SPECIES, dataB, i);
             aAsVec.sub(bAsVec).intoArray(resultData, i);
