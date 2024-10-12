@@ -1,5 +1,8 @@
 package org.apache.sysds.performance.matrix;
 
+import org.apache.sysds.api.DMLScript;
+import org.apache.sysds.conf.ConfigurationManager;
+import org.apache.sysds.conf.DMLConfig;
 import org.apache.sysds.runtime.functionobjects.Builtin;
 import org.apache.sysds.runtime.functionobjects.Minus;
 import org.apache.sysds.runtime.functionobjects.Power;
@@ -8,6 +11,8 @@ import org.apache.sysds.runtime.matrix.operators.BinaryOperator;
 import org.apache.sysds.runtime.matrix.operators.RightScalarOperator;
 import org.apache.sysds.runtime.matrix.operators.UnaryOperator;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 
@@ -25,8 +30,10 @@ public class MatrixMulSIMDPerformance {
     private static double avg1, avg2, avg3, improvement;
     private static MatrixBlock resultA = null, resultB = null;
     private static boolean resEqual1, resEqual2;
-    
-    public static void matrixMultTest(double sparsity1, double sparsity2, String rows1, String cols1, String cols2, int k, int warmupRuns) {
+
+    //TODO: Add multithreading to other tests
+
+    public static void matrixMultTest(double sparsity1, double sparsity2, String rows1, String cols1, String cols2, int k, int warmupRuns, String dmlPath) {
         String outputPath = getOutputPathMultTest(sparsity1, sparsity2);
 
         try {
@@ -35,22 +42,31 @@ public class MatrixMulSIMDPerformance {
             throw new RuntimeException(e);
         }
 
-        int[] rows = calculateSizes(rows1);
-        int[] columns1 = calculateSizes(cols1);
-        int[] columns2 = calculateSizes(cols2);
+        DMLConfig dmlConfig;
 
-        startWarmupMultTest(sparsity1, sparsity2, rows[0], columns1[0], columns2[0], k, warmupRuns);
+        try {
+            dmlConfig = new DMLConfig(String.valueOf(new File(dmlPath)));
+            ConfigurationManager.setGlobalConfig(dmlConfig);
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
+        int[] rowArr = calculateSizes(rows1);
+        int[] col1Arr = calculateSizes(cols1);
+        int[] col2Arr = calculateSizes(cols2);
+
+        startWarmupMultTest(sparsity1, sparsity2, rowArr[0], col1Arr[0], col2Arr[0], k, warmupRuns);
 
         try (FileWriter writer = new FileWriter(outputPath)) {
             // Write CSV header
             writer.append("rows1,cols1,cols2,k,time_scalar,time_simd,time_mkl,improvement\n");
 
-            for(int rl : rows) {
-                for (int cl1 : columns1) {
-                    for (int cl2 : columns2) {
+            for(int row : rowArr) {
+                for (int col1 : col1Arr) {
+                    for (int col2 : col2Arr) {
                         // Generate two random dense matrices
-                        MatrixBlock mbA = MatrixBlock.randOperations(rl, cl1, sparsity1, 0, 1, "uniform", 7);
-                        MatrixBlock mbB = MatrixBlock.randOperations(cl1, cl2, sparsity2, 0, 1, "uniform", 8);
+                        MatrixBlock mbA = MatrixBlock.randOperations(row, col1, sparsity1, 0, 1, "uniform", 7);
+                        MatrixBlock mbB = MatrixBlock.randOperations(col1, col2, sparsity2, 0, 1, "uniform", 8);
                         MatrixBlock ret = new MatrixBlock(mbA.getNumRows(), mbB.getNumColumns(), false);
 
                         avg1 = 0;
@@ -84,16 +100,16 @@ public class MatrixMulSIMDPerformance {
                         avg1 /= 10;
                         avg2 /= 10;
                         avg3 /= 10;
-                        resEqual1 = compareResults(resultA, resultB, rl, cl2);
-                        resEqual2 = compareResults(resultA, ret, rl, cl2);
+                        resEqual1 = compareResults(resultA, resultB, row, col2);
+                        resEqual2 = compareResults(resultA, ret, row, col2);
                         improvement = Math.round(((avg1 - avg2) / avg1) * 100.0 * 100.0) / 100.0;
 
-                        printStats(rl, cl1, cl2, k);
+                        printStats(row, col1, col1, col2, k, true, false);
 
                         // Write to csv
-                        writer.append(  rl + "," +
-                                        cl1 + "," +
-                                        cl2 + "," +
+                        writer.append(  row + "," +
+                                        col1 + "," +
+                                        col2 + "," +
                                         k + "," +
                                         avg1 + "," +
                                         avg2 + "," +
@@ -125,19 +141,20 @@ public class MatrixMulSIMDPerformance {
             // Write CSV header
             writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
 
-            for(int rl : rowArr) {
-                for(int cl : colArr) {
-                    MatrixBlock mbA = MatrixBlock.randOperations(rowArr[0], colArr[0], sparsity1, 0, 1, "uniform", 7);
-                    MatrixBlock mbB = MatrixBlock.randOperations(rowArr[0], colArr[0], sparsity2, 0, 1, "uniform", 8);
-                    MatrixBlock retScalar = new MatrixBlock(rowArr[0], colArr[0], false);
-                    MatrixBlock retSIMD = MatrixBlock.randOperations(rowArr[0], colArr[0], sparsity1, 0, 1, "uniform", 9);
+            for(int row : rowArr) {
+                for(int col : colArr) {
+                    MatrixBlock mbA = MatrixBlock.randOperations(row, col, sparsity1, 0, 1, "uniform", 7);
+                    MatrixBlock mbB = MatrixBlock.randOperations(row, col, sparsity2, 0, 1, "uniform", 8);
+                    MatrixBlock retScalar = new MatrixBlock(row, col, false);
+                    MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity1, 0, 1, "uniform", 9);
 
                     avg1 = 0;
                     avg2 = 0;
 
                     for(int i = 0; i < 10; i++) {
+                        retScalar.reset(row, col, 0); // prevent "cumulative" subtraction
                         t1 = System.nanoTime();
-                        LibMatrixBincell.bincellOp(mbA, mbB, retScalar, new BinaryOperator(Minus.getMinusFnObject()));
+                        LibMatrixBincell.bincellOp(mbA, mbB, retScalar, new BinaryOperator(Minus.getMinusFnObject()), 16);
                         avg1 += (System.nanoTime() - t1) / 1000000;
                     }
 
@@ -149,14 +166,14 @@ public class MatrixMulSIMDPerformance {
 
                     avg1 /= 10;
                     avg2 /= 10;
-                    resEqual1 = compareResults(retScalar, retSIMD, rl, cl);
+                    resEqual1 = compareResults(retScalar, retSIMD, row, col);
                     improvement = Math.round(((avg1 - avg2) / avg1) * 100.0 * 100.0) / 100.0;
 
-                    printStats(rl, cl, 0, k);
+                    printStats(row, col, row, col, k, false, false);
 
                     // Write to csv
-                    writer.append(  rl + "," +
-                            cl + "," +
+                    writer.append(  row + "," +
+                            col + "," +
                             k + "," +
                             avg1 + "," +
                             avg2 + "," +
@@ -180,23 +197,24 @@ public class MatrixMulSIMDPerformance {
         int[] rowArr = calculateSizes(rows);
         int[] colArr = calculateSizes(cols);
 
-        startWarmupPowerTest(sparsity, exponent, rowArr[0], colArr[0], k, warmupRuns);
+        startWarmupPowerTest(sparsity, rowArr[0], colArr[0], exponent, k, warmupRuns);
 
         try (FileWriter writer = new FileWriter(outputPath)) {
             // Write CSV header
             writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
 
-            for(int rl : rowArr) {
-                for(int cl : colArr) {
-                    MatrixBlock mbA = MatrixBlock.randOperations(rl, cl, sparsity, 0, 1, "uniform", 7);
-                    MatrixBlock retScalar = new MatrixBlock(rl, cl, false);
-                    MatrixBlock retSIMD = MatrixBlock.randOperations(rl, cl, sparsity, 0, 1, "uniform", 9);
+            for(int row : rowArr) {
+                for(int col : colArr) {
+                    MatrixBlock mbA = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 7);
+                    MatrixBlock retScalar = new MatrixBlock(row, col, false);
+                    MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 9);
                     RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent);
 
                     avg1 = 0;
                     avg2 = 0;
 
                     for(int i = 0; i < 10; i++) {
+                        retScalar.reset(row, col, 0);
                         t1 = System.nanoTime();
                         retScalar = mbA.scalarOperations(powerOpK, new MatrixBlock());
                         avg1 += (System.nanoTime() - t1) / 1000000;
@@ -210,14 +228,14 @@ public class MatrixMulSIMDPerformance {
 
                     avg1 /= 10;
                     avg2 /= 10;
-                    resEqual1 = compareResults(retScalar, retSIMD, rl, cl);
+                    resEqual1 = compareResults(retScalar, retSIMD, row, col);
                     improvement = Math.round(((avg1 - avg2) / avg1) * 100.0 * 100.0) / 100.0;
 
-                    printStats(rl, cl, 0, k);
+                    printStats(row, col, 0, 0, k, false, true);
 
                     // Write to csv
-                    writer.append(  rl + "," +
-                            cl + "," +
+                    writer.append(  row + "," +
+                            col + "," +
                             k + "," +
                             avg1 + "," +
                             avg2 + "," +
@@ -248,11 +266,11 @@ public class MatrixMulSIMDPerformance {
             // Write CSV header
             writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
 
-            for(int rl : rowArr) {
-                for(int cl : colArr) {
-                    MatrixBlock mbA = MatrixBlock.randOperations(rl, cl, sparsity, 0, 1, "uniform", 7);
-                    MatrixBlock retScalar = new MatrixBlock(rl, cl, false);
-                    MatrixBlock retSIMD = MatrixBlock.randOperations(rl, cl, sparsity, 0, 1, "uniform", 9);
+            for(int row : rowArr) {
+                for(int col : colArr) {
+                    MatrixBlock mbA = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 7);
+                    MatrixBlock retScalar = new MatrixBlock(row, col, false);
+                    MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 9);
 
                     UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP));
 
@@ -260,6 +278,7 @@ public class MatrixMulSIMDPerformance {
                     avg2 = 0;
 
                     for(int i = 0; i < 10; i++) {
+                        retScalar.reset(row, col, 0);
                         t1 = System.nanoTime();
                         retScalar = mbA.unaryOperations(expOperator, new MatrixBlock());
                         avg1 += (System.nanoTime() - t1) / 1000000;
@@ -273,14 +292,14 @@ public class MatrixMulSIMDPerformance {
 
                     avg1 /= 10;
                     avg2 /= 10;
-                    resEqual1 = compareResults(retScalar, retSIMD, rl, cl);
+                    resEqual1 = compareResults(retScalar, retSIMD, row, col);
                     improvement = Math.round(((avg1 - avg2) / avg1) * 100.0 * 100.0) / 100.0;
 
-                    printStats(rl, cl, 0, k);
+                    printStats(row, col, 0, 0, k, false, true);
 
                     // Write to csv
-                    writer.append(  rl + "," +
-                            cl + "," +
+                    writer.append(  row + "," +
+                            col + "," +
                             k + "," +
                             avg1 + "," +
                             avg2 + "," +
@@ -293,10 +312,10 @@ public class MatrixMulSIMDPerformance {
 
     }
 
-    private static void startWarmupMultTest(double sparsity1, double sparsity2, int rl, int cl1, int cl2, int k, int warmupRuns) {
-        MatrixBlock warmUpA = MatrixBlock.randOperations(rl, cl1, sparsity1, 0, 1, "uniform", 7);
-        MatrixBlock warmUpB = MatrixBlock.randOperations(cl1, cl2, sparsity2, 0, 1, "uniform", 8);
-        MatrixBlock warmUpRet = new MatrixBlock(rl, cl2, false);
+    private static void startWarmupMultTest(double sparsity1, double sparsity2, int rows, int cols1, int cols2, int k, int warmupRuns) {
+        MatrixBlock warmUpA = MatrixBlock.randOperations(rows, cols1, sparsity1, 0, 1, "uniform", 7);
+        MatrixBlock warmUpB = MatrixBlock.randOperations(cols1, cols2, sparsity2, 0, 1, "uniform", 8);
+        MatrixBlock warmUpRet = new MatrixBlock(rows, cols2, false);
 
         for(int i = 0; i < warmupRuns; i++) {
             LibMatrixMult2.matrixMult(warmUpA, warmUpB, k);
@@ -305,10 +324,10 @@ public class MatrixMulSIMDPerformance {
         }
     }
 
-    private static void startWarmupDiffTest(double sparsity1, double sparsity2, int rl, int cl, int k, int warmupRuns) {
-        MatrixBlock mbA = MatrixBlock.randOperations(rl, cl, sparsity1, 0, 1, "uniform", 7);
-        MatrixBlock mbB = MatrixBlock.randOperations(rl, cl, sparsity2, 0, 1, "uniform", 8);
-        MatrixBlock warmUpRet = new MatrixBlock(rl, cl, false);
+    private static void startWarmupDiffTest(double sparsity1, double sparsity2, int rows, int cols, int k, int warmupRuns) {
+        MatrixBlock mbA = MatrixBlock.randOperations(rows, cols, sparsity1, 0, 1, "uniform", 7);
+        MatrixBlock mbB = MatrixBlock.randOperations(rows, cols, sparsity2, 0, 1, "uniform", 8);
+        MatrixBlock warmUpRet = new MatrixBlock(rows, cols, false);
 
         for(int i = 0; i < warmupRuns; i++) {
 			LibMatrixBincell.bincellOp(mbA, mbB, warmUpRet, new BinaryOperator(Minus.getMinusFnObject()));
@@ -316,8 +335,8 @@ public class MatrixMulSIMDPerformance {
         }
     }
 
-    private static void startWarmupPowerTest(double sparsity, double exponent, int rl, int cl, int k, int warmupRuns) {
-        MatrixBlock mbA = MatrixBlock.randOperations(rl, cl, sparsity, 0, 1, "uniform", 7);
+    private static void startWarmupPowerTest(double sparsity, int rows, int cols, double exponent, int k, int warmupRuns) {
+        MatrixBlock mbA = MatrixBlock.randOperations(rows, cols, sparsity, 0, 1, "uniform", 7);
         MatrixBlock warmUpRet;
         RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent);
 
@@ -327,8 +346,8 @@ public class MatrixMulSIMDPerformance {
         }
     }
 
-    private static void startWarmupExpTest(double sparsity, int rl, int cl, int k, int warmupRuns) {
-        MatrixBlock mbA = MatrixBlock.randOperations(rl, cl, sparsity, 0, 1, "uniform", 7);
+    private static void startWarmupExpTest(double sparsity, int rows, int cols, int k, int warmupRuns) {
+        MatrixBlock mbA = MatrixBlock.randOperations(rows, cols, sparsity, 0, 1, "uniform", 7);
         MatrixBlock warmUpRet;
         UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP));
 
@@ -339,27 +358,21 @@ public class MatrixMulSIMDPerformance {
     }
 
     public static String getOutputPathMultTest(double sparsity1, double sparsity2) {
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss");
-        String formattedNow = now.format(formatter);
-
-        return BASE_PATH + "perfMult_" + formattedNow + "_s1=" + sparsity1 + "_s2=" + sparsity2 + ".csv";
+        return BASE_PATH + "perfMult_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + ".csv";
     }
 
     public static String getOutputPathDiffTest(double sparsity1, double sparsity2) {
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss");
-        String formattedNow = now.format(formatter);
-
-        return BASE_PATH + "perfDiff_" + formattedNow + "_s1=" + sparsity1 + "_s2=" + sparsity2 + ".csv";
+        return BASE_PATH + "perfDiff_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + ".csv";
     }
 
     public static String getOutputPathPowerTest(double sparsity1, double exponent) {
+        return BASE_PATH + "perfPower_" + getTimeStamp() + "_s1=" + sparsity1 + "_exponent=" + exponent + ".csv";
+    }
+
+    public static String getTimeStamp() {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss");
-        String formattedNow = now.format(formatter);
-
-        return BASE_PATH + "perfPower_" + formattedNow + "_s1=" + sparsity1 + "_exponent=" + exponent + ".csv";
+        return now.format(formatter);
     }
 
     public static String getOutputPathExpTest(double sparsity1) {
@@ -370,12 +383,17 @@ public class MatrixMulSIMDPerformance {
         return BASE_PATH + "perfExp_" + formattedNow + "_s1=" + sparsity1 + ".csv";
     }
 
+    public static void printStats(int rows1, int cols1, int rows2, int cols2, int k, boolean mklUsed, boolean singleMatrixOp) {
+        String statImprovement = "Improvement scalar -> SIMD: " + improvement + "%";
+        String statAverages = mklUsed ? "Averages - Scalar: " + avg1 + "; SIMD: " + avg2 + "; MKL: " + avg3 :
+                                    "Averages - Scalar: " + avg1 + "; SIMD: " + avg2;
+        String statMatrices = singleMatrixOp ? rows1 + "x" + cols1 : "LHS: " + rows1 + "x" + cols1 + "; RHS: " + rows2 + "x" + cols2;
+        String statResultsEqual = "Results are equal: " + ((mklUsed) ? (resEqual1 && resEqual2) : resEqual1);
 
-    public static void printStats(int rows1, int cols1, int cols2, int k) {
-        System.out.println("Improvement scalar -> SIMD: " + improvement + "%");
-        System.out.println("Averages - Scalar: " + avg1 + "; SIMD: " + avg2 + "; MKL: " + avg3);
-        System.out.println(rows1 + "x" + cols1 + " * " + cols1 + "x" + cols2 + "; threads = " + k);
-        System.out.println("Results are equal: " + (resEqual1 && resEqual2));
+        System.out.println(statImprovement);
+        System.out.println(statAverages);
+        System.out.println(statMatrices);
+        System.out.println(statResultsEqual);
         System.out.println("--------------------------------------------");
     }
 

@@ -356,9 +356,10 @@ public class Main {
 		String cols2 = args[5];
 		int k = Integer.parseInt(args[6]);
 		int warmupIterations = Integer.parseInt(args[7]);
+		String dmlPath = args[8];
 
 		try {
-			matrixMultTest(sparsity1, sparsity2, rows1, cols1, cols2, k, warmupIterations);
+			matrixMultTest(sparsity1, sparsity2, rows1, cols1, cols2, k, warmupIterations, dmlPath);
 		} catch (NumberFormatException e) {
 			e.printStackTrace();
 		}

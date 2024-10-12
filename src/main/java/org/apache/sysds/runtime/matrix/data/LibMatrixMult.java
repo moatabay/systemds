@@ -3786,7 +3786,7 @@ public class LibMatrixMult
 		int j = 0;
 		int speciesLen = SPECIES.length();
 		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
-		DoubleVector res, bAsVec;
+		DoubleVector res, bVec;
 
 		// Rest loop to handle elements that don't fit into full vector size
 		for (; j < len % speciesLen; j++) {
@@ -3796,8 +3796,8 @@ public class LibMatrixMult
 		// Block-wise iterations
 		for (; j < len; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci + j); // Create DoubleVector res to compute on
-			bAsVec = DoubleVector.fromArray(SPECIES, b, bi + j); // Create a Vector containing doubles from Array b starting at bi+j
-			res = avalVec.fma(bAsVec, res); // Compute res' = aval * b + res
+			bVec = DoubleVector.fromArray(SPECIES, b, bi + j); // Create a Vector containing doubles from Array b starting at bi+j
+			res = avalVec.fma(bVec, res); // Compute res' = aval * b + res
 			res.intoArray(c, ci + j); // Store res into c starting from ci+j
 		}
 	}
@@ -3808,7 +3808,7 @@ public class LibMatrixMult
 		int speciesLen = SPECIES.length();
 		int bn = len % speciesLen;
 		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
-		DoubleVector bAsVec, res;
+		DoubleVector bVec, res;
 
 		// Rest
 		for (; j < bi+bn; j++) {
@@ -3817,9 +3817,9 @@ public class LibMatrixMult
 
 		// Block-wise iteration
 		for (; j < len; j += speciesLen) {
-			bAsVec = DoubleVector.fromArray(SPECIES, b, j);
+			bVec = DoubleVector.fromArray(SPECIES, b, j);
 			res = DoubleVector.fromArray(SPECIES, c, ci, bix, j); // Gather values based on indexMap bix
-			res = avalVec.fma(bAsVec, res);
+			res = avalVec.fma(bVec, res);
 			res.intoArray(c, ci, bix, j); // Scatter the results back into the c array
 		}
 	}
@@ -3828,7 +3828,7 @@ public class LibMatrixMult
 	{
 		int j = 0;
 		int speciesLen = SPECIES.length();
-		DoubleVector res, b1AsVec, b2AsVec;
+		DoubleVector res, b1Vec, b2Vec;
 
 		// Create DoubleVectors that only contains values aval1 and aval2 respectively
 		DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
@@ -3842,11 +3842,11 @@ public class LibMatrixMult
 		// Iterate block-wise
 		for(; j < len; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci + j);
-			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
-			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
+			b1Vec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
+			b2Vec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
 
-			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res => res = aval1 * b1 + aval2 * b2 + res
+			res = aval1Vec.fma(b1Vec, res); // compute res' = aval1 * b1 + res
+			res = aval2Vec.fma(b2Vec, res); // compute res' = aval2 * b2 + res => res = aval1 * b1 + aval2 * b2 + res
 			res.intoArray(c, ci+j);
 		}
 	}
@@ -3855,7 +3855,7 @@ public class LibMatrixMult
 	{
 		int j = 0;
 		int speciesLen = SPECIES.length();
-		DoubleVector res, b1AsVec, b2AsVec, b3AsVec;
+		DoubleVector res, b1Vec, b2Vec, b3Vec;
 
 		// Create DoubleVectors that only contains values aval1, aval2 and aval3 respectively
 		DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
@@ -3870,13 +3870,13 @@ public class LibMatrixMult
 		// Iterate block-wise
 		for(; j < len; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci + j);
-			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
-			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
-			b3AsVec = DoubleVector.fromArray(SPECIES, b, bi3 + j);
+			b1Vec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
+			b2Vec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
+			b3Vec = DoubleVector.fromArray(SPECIES, b, bi3 + j);
 
-			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res
-			res = aval3Vec.fma(b3AsVec, res); // compute res' = aval3 * b3 + res => same principle as above
+			res = aval1Vec.fma(b1Vec, res); // compute res' = aval1 * b1 + res
+			res = aval2Vec.fma(b2Vec, res); // compute res' = aval2 * b2 + res
+			res = aval3Vec.fma(b3Vec, res); // compute res' = aval3 * b3 + res => same principle as above
 			res.intoArray(c, ci+j);
 		}
 	}
@@ -3885,7 +3885,7 @@ public class LibMatrixMult
 	{
 		int j = 0;
 		int speciesLen = SPECIES.length();
-		DoubleVector res, b1AsVec, b2AsVec, b3AsVec, b4AsVec;
+		DoubleVector res, b1Vec, b2Vec, b3Vec, b4Vec;
 
 		// Create DoubleVectors that only contains values aval1, aval2, aval3 and aval4 respectively
 		DoubleVector aval1Vec = DoubleVector.broadcast(SPECIES, aval1);
@@ -3901,15 +3901,15 @@ public class LibMatrixMult
 		// Iterate block-wise
 		for(; j < len; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci+j);
-			b1AsVec = DoubleVector.fromArray(SPECIES, b, bi1+j);
-			b2AsVec = DoubleVector.fromArray(SPECIES, b, bi2+j);
-			b3AsVec = DoubleVector.fromArray(SPECIES, b, bi3+j);
-			b4AsVec = DoubleVector.fromArray(SPECIES, b, bi4+j);
+			b1Vec = DoubleVector.fromArray(SPECIES, b, bi1+j);
+			b2Vec = DoubleVector.fromArray(SPECIES, b, bi2+j);
+			b3Vec = DoubleVector.fromArray(SPECIES, b, bi3+j);
+			b4Vec = DoubleVector.fromArray(SPECIES, b, bi4+j);
 
-			res = aval1Vec.fma(b1AsVec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2AsVec, res); // compute res' = aval2 * b2 + res
-			res = aval3Vec.fma(b3AsVec, res); // compute res' = aval3 * b3 + res
-			res = aval4Vec.fma(b4AsVec, res); // compute res' = aval4 * b4 + res => same principle as above
+			res = aval1Vec.fma(b1Vec, res); // compute res' = aval1 * b1 + res
+			res = aval2Vec.fma(b2Vec, res); // compute res' = aval2 * b2 + res
+			res = aval3Vec.fma(b3Vec, res); // compute res' = aval3 * b3 + res
+			res = aval4Vec.fma(b4Vec, res); // compute res' = aval4 * b4 + res => same principle as above
 			res.intoArray(c, ci+j);
 		}
 	}
