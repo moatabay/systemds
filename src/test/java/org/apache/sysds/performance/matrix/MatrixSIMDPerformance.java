@@ -1,6 +1,5 @@
 package org.apache.sysds.performance.matrix;
 
-import org.apache.sysds.api.DMLScript;
 import org.apache.sysds.conf.ConfigurationManager;
 import org.apache.sysds.conf.DMLConfig;
 import org.apache.sysds.runtime.functionobjects.Builtin;
@@ -21,7 +20,7 @@ import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-public class MatrixMulSIMDPerformance {
+public class MatrixSIMDPerformance {
 
     private static final String BASE_PATH = "vector_api_test/";
     private static final double EPSILON = 1E-10;
@@ -221,8 +220,9 @@ public class MatrixMulSIMDPerformance {
                     }
 
                     for(int i = 0; i < 10; i++) {
+                        retSIMD.reset(row, col, 0);
                         t2 = System.nanoTime();
-                        LibMatrixEWOP.power(mbA, retSIMD, exponent);
+                        retSIMD = mbA.scalarOperationsSIMD(powerOpK, new MatrixBlock());
                         avg2 += (System.nanoTime() - t2) / 1000000;
                     }
 
@@ -285,8 +285,9 @@ public class MatrixMulSIMDPerformance {
                     }
 
                     for(int i = 0; i < 10; i++) {
+                        retSIMD.reset(row, col, 0);
                         t2 = System.nanoTime();
-                        LibMatrixEWOP.exp(mbA, retSIMD);
+                        retSIMD = mbA.unaryOperationsSIMD(expOperator, new MatrixBlock());
                         avg2 += (System.nanoTime() - t2) / 1000000;
                     }
 
@@ -342,7 +343,7 @@ public class MatrixMulSIMDPerformance {
 
         for(int i = 0; i < warmupRuns; i++) {
             warmUpRet = mbA.scalarOperations(powerOpK, new MatrixBlock());
-            LibMatrixEWOP.power(mbA, warmUpRet, exponent);
+            warmUpRet = mbA.scalarOperationsSIMD(powerOpK, new MatrixBlock());
         }
     }
 
@@ -353,7 +354,7 @@ public class MatrixMulSIMDPerformance {
 
         for(int i = 0; i < warmupRuns; i++) {
             warmUpRet = mbA.unaryOperations(expOperator, new MatrixBlock());
-            LibMatrixEWOP.exp(mbA, warmUpRet);
+            warmUpRet = mbA.unaryOperationsSIMD(expOperator, new MatrixBlock());
         }
     }
 

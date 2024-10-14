@@ -46,6 +46,7 @@ import org.apache.sysds.utils.NativeHelper;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.stream.IntStream;
 
@@ -3823,6 +3824,37 @@ public class LibMatrixMult
 			res.intoArray(c, ci, bix, j); // Scatter the results back into the c array
 		}
 	}
+
+//	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int[] bix, int bi, int ci, int len) {
+//		int j = bi;
+//		int speciesLen = SPECIES.length();
+//		int bn = len % speciesLen;
+//		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
+//		DoubleVector bVec, res;
+//		VectorMask<Double> mask;
+//
+//		// Rest (Non-vectorized part)
+//		for (; j < bi + bn; j++) {
+//			c[ci + bix[j]] += aval * b[j];
+//		}
+//
+//		// Vectorized loop using VectorMask
+//		for (; j < len; j += speciesLen) {
+//			// Create a mask to handle cases where the index goes out of bounds
+//			mask = VectorMask.fromArray(new VectorSpecies<Double>(), bix, j);
+//			VectorSpecies.of(double, )
+//
+//			// Load values from arrays using masked gather
+//			bVec = DoubleVector.fromArray(SPECIES, b, j, mask);
+//			res = DoubleVector.fromArray(SPECIES, c, ci, bix, j, mask);
+//
+//			// Perform the FMA (fused multiply-add) operation
+//			res = avalVec.fma(bVec, res);
+//
+//			// Scatter the results back using the same mask
+//			res.intoArray(c, ci, bix, j, mask);
+//		}
+//	}
 
 	private static void vectMultiplyAdd2( final double aval1, final double aval2, double[] b, double[] c, int bi1, int bi2, int ci, final int len )
 	{

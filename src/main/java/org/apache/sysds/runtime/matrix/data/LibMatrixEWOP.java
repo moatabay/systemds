@@ -53,47 +53,44 @@ public class LibMatrixEWOP {
     }
 
     private static void powerSparse(MatrixBlock a, MatrixBlock ret, double exponent) {
-//        ret.allocateSparseRowsBlock();
-//
-//        SparseBlock blockA = a.getSparseBlock();
-//        SparseBlock blockRet = a.getSparseBlock();
-//
-//        int ru = a.getNumRows();
-//        int specLen = SPECIES.length();
-//
-//        // Iterate over all rows
-//        for (int r = 0; r < ru; r++) {
-//            if (blockA.isEmpty(r)) continue;
-//
-//            int apos = blockA.pos(r);
-//            int alen = blockA.size(r);
-//            int[] aix = blockA.indexes(r);
-//            double[] avals = blockA.values(r);
-//            DoubleVector aVec;
-//
-//            int i = 0;
-//
-//            // Rest
-//            for (; i < alen % specLen; i++) {
-//                blockRet[i] = Math.pow(aVals[i], exponent);
-//            }
-//
-//            // Vectorized iteration
-//            for (; i <= SPECIES.loopBound(len); i += specLen) {
-//                aVec = DoubleVector.fromArray(SPECIES, aVals, i);
-//                aVec.lanewise(VectorOperators.POW, exponent).intoArray(retVals, i);
-//            }
-//
-//            double val = values[pos + j];
-//            int col = indexes[pos + j];
-//
-//            double result = Math.pow(val, exponent);
-//
-//            ret.setValueSparseUnsafe(r, col, result);
-//        }
-//
-//        // Set the number of non-zeros in the result matrix
-//        ret.setNonZeros(a.getNonZeros());
+        ret.allocateSparseRowsBlock();
+
+        SparseBlock blockA = a.getSparseBlock();
+        SparseBlock blockRet = ret.getSparseBlock();
+
+        int ru = a.getNumRows();
+        int specLen = SPECIES.length();
+
+        // Iterate over all rows
+        for (int r = 0; r < ru; r++) {
+            if (blockA.isEmpty(r)) continue;
+
+            int apos = blockA.pos(r);
+            int alen = blockA.size(r);
+            int[] aix = blockA.indexes(r);
+            double[] avals = blockA.values(r);
+            DoubleVector aVec;
+
+            blockRet.allocate(r, alen);
+            double[] retVals = blockRet.values(r);  // Result row values
+            int[] retix = blockRet.indexes(r);  // Result row indexes (same as input)
+
+            int i = apos;
+            int max = apos + alen;
+
+            // Rest
+            for (; i < max % specLen; i++) {
+                retVals[i] = Math.pow(avals[i], exponent);
+            }
+
+            // Vectorized iteration
+            for (; i < SPECIES.loopBound(max); i += specLen) {
+                aVec = DoubleVector.fromArray(SPECIES, avals, i);
+                aVec.lanewise(VectorOperators.POW, exponent).intoArray(retVals, i);
+            }
+        }
+
+        ret.setNonZeros(a.getNonZeros());
     }
 
     private static void powerDense(MatrixBlock a, MatrixBlock ret, double exponent) {

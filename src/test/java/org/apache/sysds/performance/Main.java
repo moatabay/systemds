@@ -19,7 +19,6 @@
 
 package org.apache.sysds.performance;
 
-import jdk.incubator.vector.DoubleVector;
 import org.apache.sysds.performance.compression.IOBandwidth;
 import org.apache.sysds.performance.compression.SchemaTest;
 import org.apache.sysds.performance.compression.Serialize;
@@ -36,16 +35,11 @@ import org.apache.sysds.performance.matrix.MatrixStorage;
 import org.apache.sysds.performance.matrix.SparseAppend;
 import org.apache.sysds.runtime.data.SparseBlock;
 import org.apache.sysds.runtime.frame.data.FrameBlock;
-import org.apache.sysds.runtime.matrix.data.LibMatrixMult2;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
 import org.apache.sysds.runtime.util.CommonThreadPool;
 import org.apache.sysds.test.TestUtils;
 
-import java.io.FileWriter;
-import java.io.IOException;
-import java.util.Arrays;
-
-import static org.apache.sysds.performance.matrix.MatrixMulSIMDPerformance.*;
+import static org.apache.sysds.performance.matrix.MatrixSIMDPerformance.*;
 
 public class Main {
 
