@@ -151,7 +151,7 @@ public class MatrixSIMDPerformance {
                     avg2 = 0;
 
                     for(int i = 0; i < 10; i++) {
-                        retScalar.reset(row, col, 0); // prevent "cumulative" subtraction
+                        retScalar= new MatrixBlock(row, col, false); // prevent "cumulative" subtraction
                         t1 = System.nanoTime();
                         LibMatrixBincell.bincellOp(mbA, mbB, retScalar, new BinaryOperator(Minus.getMinusFnObject()), 16);
                         avg1 += (System.nanoTime() - t1) / 1000000;

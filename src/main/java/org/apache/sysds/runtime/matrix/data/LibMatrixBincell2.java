@@ -556,8 +556,7 @@ public class LibMatrixBincell2 {
 				int len = apos+alen;
 				int specLen = SPECIES.length();
 				int max = len % specLen;
-				DoubleVector aVec, res;
-				IntVector aixVec;
+				DoubleVector aVec;
 
 				int j = apos;
 
@@ -613,7 +612,8 @@ public class LibMatrixBincell2 {
 			ret.nonZeros = nnz;
 		}
 	}
-	
+
+	//TODO:SIMD
 	private static long safeBinary(MatrixBlock m1, MatrixBlock m2, MatrixBlock ret, BinaryOperator op,
 		BinaryAccessType atype, int rl, int ru)
 	{
@@ -637,12 +637,12 @@ public class LibMatrixBincell2 {
 		{
 			//note: m2 vector and hence always dense
 			if( !m1.sparse && !m2.sparse && !ret.sparse ) //DENSE all
-				return safeBinaryMVDense(m1, m2, ret, op, rl, ru);
+				return safeBinaryMVDense(m1, m2, ret, op, rl, ru); //TODO:SIMD
 			else if( m1.sparse && !m2.sparse && !ret.sparse
 				&& atype == BinaryAccessType.MATRIX_ROW_VECTOR)
 				safeBinaryMVSparseDenseRow(m1, m2, ret, op);
 			else if( m1.sparse ) //SPARSE m1
-				safeBinaryMVSparse(m1, m2, ret, op);
+				safeBinaryMVSparse(m1, m2, ret, op); //TODO:SIMD might also be interesting, if I see good results with binarymvdense
 			else if( !m1.sparse && !m2.sparse && ret.sparse && op.fn instanceof Multiply
 				&& atype == BinaryAccessType.MATRIX_COL_VECTOR
 				&& (long)m1.rlen * m2.clen < Integer.MAX_VALUE )
@@ -665,7 +665,7 @@ public class LibMatrixBincell2 {
 				ret.copyShallow(m2);
 			}
 			else if(m1.sparse && m2.sparse) {
-				return safeBinaryMMSparseSparse(m1, m2, ret, op, rl, ru);
+				return safeBinaryMMSparseSparse(m1, m2, ret, op, rl, ru); //TODO:SIMD
 			}
 			else if( !ret.sparse && (m1.sparse || m2.sparse) &&
 				(op.fn instanceof Plus || op.fn instanceof Minus ||
@@ -675,10 +675,10 @@ public class LibMatrixBincell2 {
 			}
 			else if( !ret.sparse && !m1.sparse && !m2.sparse 
 				&& m1.denseBlock!=null && m2.denseBlock!=null ) {
-				return safeBinaryMMDenseDenseDense(m1, m2, ret, op, rl, ru);
+				return safeBinaryMMDenseDenseDense(m1, m2, ret, op, rl, ru); //TODO:SIMD
 			}
 			else if( skipEmpty && (m1.sparse || m2.sparse) ) {
-				return safeBinaryMMSparseDenseSkip(m1, m2, ret, op, rl, ru);
+				return safeBinaryMMSparseDenseSkip(m1, m2, ret, op, rl, ru); //TODO:SIMD
 			}
 			else { //generic case
 				return safeBinaryMMGeneric(m1, m2, ret, op, rl, ru);
@@ -1707,7 +1707,6 @@ public class LibMatrixBincell2 {
 					for(; j < len; j += specLen) {
 						aVec = DoubleVector.fromArray(SPECIES, avals, j);
 						res = aVec.lanewise(VectorOperators.POW, exponent); //TODO: can that be improved?
-						//TODO: count nnz
 						for(int i = 0; i < specLen; i++) {
 							val = res.lane(i);
 							c.append(r, aix[j+i], val);

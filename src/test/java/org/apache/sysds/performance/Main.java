@@ -394,6 +394,65 @@ public class Main {
 		matrixExpTest(sparsity, rows, cols, k, warmupRuns);
 	}
 
+	// Tests for DenseDense and DenseSparse MM Mult
+	private static void run2010(String[] args) {
+		// DenseDense Small tests (matrix sizes <= 5000)
+		String sizesSm = "1000-5000#1000";
+		int warmupRunsSm = 80;
+		matrixMultTest(1.0, 1.0, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+		matrixMultTest(1.0, 0.7, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+		matrixMultTest(1.0, 0.5, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+		matrixMultTest(0.7, 0.9, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+		matrixMultTest(0.7, 0.5, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+
+		// DenseDense Medium tests (matrix sizes >= 5000 and <= 25000)
+		String sizesMd = "5000-25000#5000";
+		int warmupRunsMd = 50;
+		matrixMultTest(1.0, 1.0, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(1.0, 0.7, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(1.0, 0.5, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(0.7, 0.9, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(0.7, 0.5, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+
+		// DenseDense Large tests (matrix sizes >= 30000 and <= 50000)
+		String sizesLg = "30000-50000#5000";
+		int warmupRunsLg = 15;
+		matrixMultTest(1.0, 1.0, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(1.0, 0.7, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(1.0, 0.5, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(0.7, 0.9, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(0.7, 0.5, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+
+		// #################################################################################################
+		// DenseSparse Small tests (matrix sizes <= 5000)
+		sizesSm = "1000-5000#1000";
+		warmupRunsSm = 50;
+		matrixMultTest(1.0, 1.0, sizesSm, sizesSm, sizesSm, 32, 100, args[1]);
+		matrixMultTest(1.0, 0.7, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+		matrixMultTest(1.0, 0.5, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+		matrixMultTest(0.7, 0.9, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+		matrixMultTest(0.7, 0.5, sizesSm, sizesSm, sizesSm, 32, 80, args[1]);
+
+		// DenseSparse Medium tests (matrix sizes >= 5000 and <= 25000)
+		sizesMd = "5000-25000#5000";
+		warmupRunsMd = 50;
+		matrixMultTest(1.0, 1.0, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(1.0, 0.7, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(1.0, 0.5, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(0.7, 0.9, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+		matrixMultTest(0.7, 0.5, sizesMd, sizesMd, sizesMd, 32, 50, args[1]);
+
+		// DenseSparse Large tests (matrix sizes >= 30000 and <= 25000)
+		sizesLg = "30000-50000#5000";
+		warmupRunsLg = 50;
+		matrixMultTest(1.0, 1.0, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(1.0, 0.7, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(1.0, 0.5, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(0.7, 0.9, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+		matrixMultTest(0.7, 0.5, sizesMd, sizesMd, sizesMd, 32, 15, args[1]);
+
+	}
+
 	public static void main(String[] args) {
 		try {
 			exec(Integer.parseInt(args[0]), args);

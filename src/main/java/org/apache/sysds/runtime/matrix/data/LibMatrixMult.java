@@ -3709,7 +3709,7 @@ public class LibMatrixMult
 		int i = 0;
 		int speciesLen = SPECIES.length();
 		int bn = len % speciesLen;
-		DoubleVector aAsVec, bAsVec;
+		DoubleVector aVec, bVec;
 
 		//compute rest
 		for(; i < bn; i++)
@@ -3718,9 +3718,9 @@ public class LibMatrixMult
 		//Block-wise iteration
 		for(; i < len; i+= speciesLen)
 		{
-			aAsVec = DoubleVector.fromArray(SPECIES, a, ai+i);
-			bAsVec = DoubleVector.fromArray(SPECIES, b, bi+i);
-			val += aAsVec.mul(bAsVec).reduceLanes(VectorOperators.ADD);
+			aVec = DoubleVector.fromArray(SPECIES, a, ai+i);
+			bVec = DoubleVector.fromArray(SPECIES, b, bi+i);
+			val += aVec.mul(bVec).reduceLanes(VectorOperators.ADD);
 		}
 
 		return val;
@@ -3734,7 +3734,7 @@ public class LibMatrixMult
 		int i = ai;
 		int speciesLen = SPECIES.length();
 		int bn = len % speciesLen;
-		DoubleVector aAsVec, bAsVec;
+		DoubleVector aVec, bVec;
 
 		//compute rest
 		for(; i < ai+bn; i++ )
@@ -3743,9 +3743,9 @@ public class LibMatrixMult
 		//Block-wise iteration
 		for(; i < ai+len; i+=speciesLen )
 		{
-			aAsVec = DoubleVector.fromArray(SPECIES, a, i);
-			bAsVec = DoubleVector.fromArray(SPECIES, b, bi, aix, i);
-			val += aAsVec.mul(bAsVec).reduceLanes(VectorOperators.ADD);
+			aVec = DoubleVector.fromArray(SPECIES, a, i);
+			bVec = DoubleVector.fromArray(SPECIES, b, bi, aix, i);
+			val += aVec.mul(bVec).reduceLanes(VectorOperators.ADD);
 		}
 
 		//scalar result
@@ -3877,8 +3877,8 @@ public class LibMatrixMult
 			b1Vec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
 			b2Vec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
 
-			res = aval1Vec.fma(b1Vec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2Vec, res); // compute res' = aval2 * b2 + res => res = aval1 * b1 + aval2 * b2 + res
+			res = aval1Vec.fma(b1Vec, res);
+			res = aval2Vec.fma(b2Vec, res);
 			res.intoArray(c, ci+j);
 		}
 	}
@@ -3906,9 +3906,9 @@ public class LibMatrixMult
 			b2Vec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
 			b3Vec = DoubleVector.fromArray(SPECIES, b, bi3 + j);
 
-			res = aval1Vec.fma(b1Vec, res); // compute res' = aval1 * b1 + res
-			res = aval2Vec.fma(b2Vec, res); // compute res' = aval2 * b2 + res
-			res = aval3Vec.fma(b3Vec, res); // compute res' = aval3 * b3 + res => same principle as above
+			res = aval1Vec.fma(b1Vec, res);
+			res = aval2Vec.fma(b2Vec, res);
+			res = aval3Vec.fma(b3Vec, res);
 			res.intoArray(c, ci+j);
 		}
 	}
