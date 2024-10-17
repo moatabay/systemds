@@ -134,6 +134,9 @@ public class Main {
 			case 2003:
 				run2003(args);
 				break;
+			case 2010:
+				run2010(args);
+				break;
 			default:
 				break;
 		}
