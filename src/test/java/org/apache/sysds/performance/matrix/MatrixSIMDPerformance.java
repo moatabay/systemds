@@ -3,6 +3,7 @@ package org.apache.sysds.performance.matrix;
 import org.apache.sysds.conf.ConfigurationManager;
 import org.apache.sysds.conf.DMLConfig;
 import org.apache.sysds.runtime.functionobjects.Builtin;
+import org.apache.sysds.runtime.functionobjects.Divide;
 import org.apache.sysds.runtime.functionobjects.Minus;
 import org.apache.sysds.runtime.functionobjects.Power;
 import org.apache.sysds.runtime.matrix.data.*;
@@ -23,17 +24,15 @@ import java.time.format.DateTimeFormatter;
 public class MatrixSIMDPerformance {
 
     private static final String BASE_PATH = "vector_api_test/";
-    private static final double EPSILON = 1E-10;
+    private static final double EPSILON = 1E-9;
 
     private static long t1, t2, t3;
     private static double avg1, avg2, avg3, improvement;
     private static MatrixBlock resultA = null, resultB = null;
     private static boolean resEqual1, resEqual2;
 
-    //TODO: Add multithreading to other tests
-
     public static void matrixMultTest(double sparsity1, double sparsity2, String rows1, String cols1, String cols2, int k, int warmupRuns, String dmlPath) {
-        String outputPath = getOutputPathMultTest(sparsity1, sparsity2);
+        String outputPath = getOutputPathMultTest(sparsity1, sparsity2, k);
 
         try {
             Files.createDirectories(Paths.get(BASE_PATH));
@@ -60,9 +59,9 @@ public class MatrixSIMDPerformance {
             // Write CSV header
             writer.append("rows1,cols1,cols2,k,time_scalar,time_simd,time_mkl,improvement\n");
 
-            for(int row : rowArr) {
-                for (int col1 : col1Arr) {
-                    for (int col2 : col2Arr) {
+            for(int row : rowArr) { // Varying row sizes for lhs matrix
+                for (int col1 : col1Arr) { // Varying col sizes for lhs matrix/row sizes for rhs matrix
+                    for (int col2 : col2Arr) { // Varying col sizes for rhs matrix
                         // Generate two random dense matrices
                         MatrixBlock mbA = MatrixBlock.randOperations(row, col1, sparsity1, 0, 1, "uniform", 7);
                         MatrixBlock mbB = MatrixBlock.randOperations(col1, col2, sparsity2, 0, 1, "uniform", 8);
@@ -122,8 +121,8 @@ public class MatrixSIMDPerformance {
         }
     }
 
-    public static void matrixDiffTest(double sparsity1, double sparsity2, String rows, String cols, int k, int warmupRuns) {
-        String outputPath = getOutputPathDiffTest(sparsity1, sparsity2);
+    public static void matrixDivTest(double sparsity1, double sparsity2, double sparsity3, String rows, String cols, int k, int warmupRuns) {
+        String outputPath = getOutputPathDivTest(sparsity1, sparsity2, sparsity3, k);
 
         try {
             Files.createDirectories(Paths.get(BASE_PATH));
@@ -134,32 +133,31 @@ public class MatrixSIMDPerformance {
         int[] rowArr = calculateSizes(rows);
         int[] colArr = calculateSizes(cols);
 
-        startWarmupDiffTest(sparsity1, sparsity2, rowArr[0], colArr[0], k, warmupRuns);
+        startWarmupDivTest(sparsity1, sparsity2, sparsity3, rowArr[0], colArr[0], k, warmupRuns);
 
         try (FileWriter writer = new FileWriter(outputPath)) {
             // Write CSV header
             writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
 
-            for(int row : rowArr) {
-                for(int col : colArr) {
+            for(int row : rowArr) { // Varying sizes for row
+                for(int col : colArr) { // Varying sizes for col
                     MatrixBlock mbA = MatrixBlock.randOperations(row, col, sparsity1, 0, 1, "uniform", 7);
                     MatrixBlock mbB = MatrixBlock.randOperations(row, col, sparsity2, 0, 1, "uniform", 8);
-                    MatrixBlock retScalar = new MatrixBlock(row, col, false);
-                    MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity1, 0, 1, "uniform", 9);
+                    MatrixBlock retScalar = MatrixBlock.randOperations(row, col, sparsity3, 0, 1, "uniform", 9);
+                    MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity3, 0, 1, "uniform", 10);
 
                     avg1 = 0;
                     avg2 = 0;
 
                     for(int i = 0; i < 10; i++) {
-                        retScalar= new MatrixBlock(row, col, false); // prevent "cumulative" subtraction
                         t1 = System.nanoTime();
-                        LibMatrixBincell.bincellOp(mbA, mbB, retScalar, new BinaryOperator(Minus.getMinusFnObject()), 16);
+                        LibMatrixBincell.bincellOp(mbA, mbB, retScalar, new BinaryOperator(Divide.getDivideFnObject()), k);
                         avg1 += (System.nanoTime() - t1) / 1000000;
                     }
 
                     for(int i = 0; i < 10; i++) {
                         t2 = System.nanoTime();
-                        LibMatrixEWOP.diff(mbA, mbB, retSIMD);
+                        LibMatrixBincell2.bincellOp(mbA, mbB, retScalar, new BinaryOperator(Divide.getDivideFnObject()), k);
                         avg2 += (System.nanoTime() - t2) / 1000000;
                     }
 
@@ -185,7 +183,7 @@ public class MatrixSIMDPerformance {
     }
 
     public static void matrixPowerTest(double sparsity, String rows, String cols, double exponent, int k, int warmupRuns) {
-        String outputPath = getOutputPathPowerTest(sparsity, exponent);
+        String outputPath = getOutputPathPowerTest(sparsity, exponent, k);
 
         try {
             Files.createDirectories(Paths.get(BASE_PATH));
@@ -202,8 +200,8 @@ public class MatrixSIMDPerformance {
             // Write CSV header
             writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
 
-            for(int row : rowArr) {
-                for(int col : colArr) {
+            for(int row : rowArr) { // Varying sizes for row
+                for(int col : colArr) { // Varying sizes for col
                     MatrixBlock mbA = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 7);
                     MatrixBlock retScalar = new MatrixBlock(row, col, false);
                     MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 9);
@@ -249,7 +247,7 @@ public class MatrixSIMDPerformance {
     }
 
     public static void matrixExpTest(double sparsity, String rows, String cols, int k, int warmupRuns) {
-        String outputPath = getOutputPathExpTest(sparsity);
+        String outputPath = getOutputPathExpTest(sparsity, k);
 
         try {
             Files.createDirectories(Paths.get(BASE_PATH));
@@ -266,8 +264,8 @@ public class MatrixSIMDPerformance {
             // Write CSV header
             writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
 
-            for(int row : rowArr) {
-                for(int col : colArr) {
+            for(int row : rowArr) { // Varying sizes for row
+                for(int col : colArr) { // Varying sizes for col
                     MatrixBlock mbA = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 7);
                     MatrixBlock retScalar = new MatrixBlock(row, col, false);
                     MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, 0, 1, "uniform", 9);
@@ -325,14 +323,14 @@ public class MatrixSIMDPerformance {
         }
     }
 
-    private static void startWarmupDiffTest(double sparsity1, double sparsity2, int rows, int cols, int k, int warmupRuns) {
+    private static void startWarmupDivTest(double sparsity1, double sparsity2, double sparsity3, int rows, int cols, int k, int warmupRuns) {
         MatrixBlock mbA = MatrixBlock.randOperations(rows, cols, sparsity1, 0, 1, "uniform", 7);
         MatrixBlock mbB = MatrixBlock.randOperations(rows, cols, sparsity2, 0, 1, "uniform", 8);
-        MatrixBlock warmUpRet = new MatrixBlock(rows, cols, false);
+        MatrixBlock warmUpRet = MatrixBlock.randOperations(rows, cols, sparsity3, 0, 1, "uniform", 9);
 
         for(int i = 0; i < warmupRuns; i++) {
-			LibMatrixBincell.bincellOp(mbA, mbB, warmUpRet, new BinaryOperator(Minus.getMinusFnObject()));
-			LibMatrixEWOP.diff(mbA, mbB, warmUpRet);
+			LibMatrixBincell.bincellOp(mbA, mbB, warmUpRet, new BinaryOperator(Divide.getDivideFnObject()));
+            LibMatrixBincell2.bincellOp(mbA, mbB, warmUpRet, new BinaryOperator(Divide.getDivideFnObject()));
         }
     }
 
@@ -358,30 +356,27 @@ public class MatrixSIMDPerformance {
         }
     }
 
-    public static String getOutputPathMultTest(double sparsity1, double sparsity2) {
-        return BASE_PATH + "perfMult_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + ".csv";
+    public static String getOutputPathMultTest(double sparsity1, double sparsity2, int k) {
+        return BASE_PATH + "perfMult_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_k=" + k + ".csv";
     }
 
-    public static String getOutputPathDiffTest(double sparsity1, double sparsity2) {
-        return BASE_PATH + "perfDiff_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + ".csv";
+    public static String getOutputPathDivTest(double sparsity1, double sparsity2, double sparsity3, int k) {
+        //TODO: add different names for plots for different div cases
+        return BASE_PATH + "perfDiv_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_s3=" + sparsity3 + "_k=" + k + ".csv";
     }
 
-    public static String getOutputPathPowerTest(double sparsity1, double exponent) {
-        return BASE_PATH + "perfPower_" + getTimeStamp() + "_s1=" + sparsity1 + "_exponent=" + exponent + ".csv";
+    public static String getOutputPathPowerTest(double sparsity1, double exponent, int k) {
+        return BASE_PATH + "perfPower_" + getTimeStamp() + "_s1=" + sparsity1 + "_exponent=" + exponent + "_k=" + k + ".csv";
+    }
+
+    public static String getOutputPathExpTest(double sparsity1, int k) {
+        return BASE_PATH + "perfExp_" + getTimeStamp() + "_s1=" + sparsity1 + "_k=" + k + ".csv";
     }
 
     public static String getTimeStamp() {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss");
         return now.format(formatter);
-    }
-
-    public static String getOutputPathExpTest(double sparsity1) {
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss");
-        String formattedNow = now.format(formatter);
-
-        return BASE_PATH + "perfExp_" + formattedNow + "_s1=" + sparsity1 + ".csv";
     }
 
     public static void printStats(int rows1, int cols1, int rows2, int cols2, int k, boolean mklUsed, boolean singleMatrixOp) {
@@ -399,6 +394,8 @@ public class MatrixSIMDPerformance {
     }
 
     public static boolean compareResults(MatrixBlock mb1, MatrixBlock mb2, int rows, int cols) {
+        if(mb1.getNonZeros() != mb2.getNonZeros()) return false;
+
         for(int i = 0; i < rows; i++) {
             for(int j = 0; j < cols; j++) {
                 if(Math.abs(mb1.get(i,j)-mb2.get(i,j)) > EPSILON) {
