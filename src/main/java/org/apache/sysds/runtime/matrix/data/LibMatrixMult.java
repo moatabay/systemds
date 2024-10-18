@@ -3701,54 +3701,51 @@ public class LibMatrixMult
 		return val; 
 	}
 
-	//TODO:SIMD
-	//note: public for use by codegen for consistency
-	public static double dotProduct( double[] a, double[] b, int ai, int bi, final int len )
-	{
+	// TODO:SIMD
+	// note: public for use by codegen for consistency
+	public static double dotProduct(double[] a, double[] b, int ai, int bi, final int len) {
 		double val = 0;
 		int i = 0;
 		int speciesLen = SPECIES.length();
 		int bn = len % speciesLen;
 		DoubleVector aVec, bVec;
 
-		//compute rest
+		// compute rest
 		for(; i < bn; i++)
-			val += a[ ai+i ] * b[ bi+i ];
+			val += a[ai + i] * b[bi + i];
 
-		//Block-wise iteration
-		for(; i < len; i+= speciesLen)
-		{
-			aVec = DoubleVector.fromArray(SPECIES, a, ai+i);
-			bVec = DoubleVector.fromArray(SPECIES, b, bi+i);
+		// Block-wise iteration
+		for(; i < len; i += speciesLen) {
+
+			aVec = DoubleVector.fromArray(SPECIES, a, ai + i);
+			bVec = DoubleVector.fromArray(SPECIES, b, bi + i);
 			val += aVec.mul(bVec).reduceLanes(VectorOperators.ADD);
 		}
 
 		return val;
 	}
 
-	//TODO:SIMD
-	//note: public for use by codegen for consistency
-	public static double dotProduct( double[] a, double[] b, int[] aix, int ai, final int bi, final int len )
-	{
+	// TODO:SIMD
+	// note: public for use by codegen for consistency
+	public static double dotProduct(double[] a, double[] b, int[] aix, int ai, final int bi, final int len) {
 		double val = 0;
 		int i = ai;
 		int speciesLen = SPECIES.length();
 		int bn = len % speciesLen;
 		DoubleVector aVec, bVec;
 
-		//compute rest
-		for(; i < ai+bn; i++ )
-			val += a[ i ] * b[ bi+aix[i] ];
+		// compute rest
+		for(; i < ai + bn; i++)
+			val += a[i] * b[bi + aix[i]];
 
-		//Block-wise iteration
-		for(; i < ai+len; i+=speciesLen )
-		{
+		// Block-wise iteration
+		for(; i < ai + len; i += speciesLen) {
 			aVec = DoubleVector.fromArray(SPECIES, a, i);
 			bVec = DoubleVector.fromArray(SPECIES, b, bi, aix, i);
 			val += aVec.mul(bVec).reduceLanes(VectorOperators.ADD);
 		}
 
-		//scalar result
+		// scalar result
 		return val;
 	}
 	
@@ -3790,20 +3787,21 @@ public class LibMatrixMult
 		DoubleVector res, bVec;
 
 		// Rest loop to handle elements that don't fit into full vector size
-		for (; j < len % speciesLen; j++) {
-			c[ci+j] += aval * b[bi+j];
+		for(; j < len % speciesLen; j++) {
+			c[ci + j] += aval * b[bi + j];
 		}
 
 		// Block-wise iterations
-		for (; j < len; j += speciesLen) {
+		for(; j < len; j += speciesLen) {
 			res = DoubleVector.fromArray(SPECIES, c, ci + j); // Create DoubleVector res to compute on
-			bVec = DoubleVector.fromArray(SPECIES, b, bi + j); // Create a Vector containing doubles from Array b starting at bi+j
+			bVec = DoubleVector.fromArray(SPECIES, b, bi + j); // Create a Vector containing doubles from Array b
+																// starting at bi+j
 			res = avalVec.fma(bVec, res); // Compute res' = aval * b + res
 			res.intoArray(c, ci + j); // Store res into c starting from ci+j
 		}
 	}
 
-	//note: public for use by codegen for consistency
+	// note: public for use by codegen for consistency
 	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int[] bix, int bi, int ci, int len) {
 		int j = bi;
 		int speciesLen = SPECIES.length();
@@ -3812,12 +3810,12 @@ public class LibMatrixMult
 		DoubleVector bVec, res;
 
 		// Rest
-		for (; j < bi+bn; j++) {
-			c[ ci + bix[j] ] += aval * b[ j ];
+		for(; j < bi + bn; j++) {
+			c[ci + bix[j]] += aval * b[j];
 		}
 
 		// Block-wise iteration
-		for (; j < len; j += speciesLen) {
+		for(; j < len; j += speciesLen) {
 			bVec = DoubleVector.fromArray(SPECIES, b, j);
 			res = DoubleVector.fromArray(SPECIES, c, ci, bix, j); // Gather values based on indexMap bix
 			res = avalVec.fma(bVec, res);
@@ -3825,8 +3823,27 @@ public class LibMatrixMult
 		}
 	}
 
-	private static void vectMultiplyAdd2( final double aval1, final double aval2, double[] b, double[] c, int bi1, int bi2, int ci, final int len )
-	{
+	// Mask implementation that makes the scalar loop redundant
+	// public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int[] bix, int bi, int ci, int len)
+	// {
+	// int j = bi;
+	// int speciesLen = SPECIES.length();
+	// int bn = len % speciesLen;
+	// DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
+	// DoubleVector bVec, res;
+	//
+	// // Block-wise iteration
+	// for (; j < len; j += speciesLen) {
+	// var mask = SPECIES.indexInRange(j, len);
+	// bVec = DoubleVector.fromArray(SPECIES, b, j, mask);
+	// res = DoubleVector.fromArray(SPECIES, c, ci, bix, j, mask); // Gather values based on indexMap bix
+	// res = avalVec.fma(bVec, res);
+	// res.intoArray(c, ci, bix, j, mask); // Scatter the results back into the c array
+	// }
+	// }
+
+	private static void vectMultiplyAdd2(final double aval1, final double aval2, double[] b, double[] c, int bi1,
+		int bi2, int ci, final int len) {
 		int j = 0;
 		int speciesLen = SPECIES.length();
 		DoubleVector res, b1Vec, b2Vec;
@@ -3848,12 +3865,12 @@ public class LibMatrixMult
 
 			res = aval1Vec.fma(b1Vec, res);
 			res = aval2Vec.fma(b2Vec, res);
-			res.intoArray(c, ci+j);
+			res.intoArray(c, ci + j);
 		}
 	}
 
-	private static void vectMultiplyAdd3( final double aval1, final double aval2, final double aval3, double[] b, double[] c, int bi1, int bi2, int bi3, int ci, final int len )
-	{
+	private static void vectMultiplyAdd3(final double aval1, final double aval2, final double aval3, double[] b,
+		double[] c, int bi1, int bi2, int bi3, int ci, final int len) {
 		int j = 0;
 		int speciesLen = SPECIES.length();
 		DoubleVector res, b1Vec, b2Vec, b3Vec;
@@ -3863,7 +3880,7 @@ public class LibMatrixMult
 		DoubleVector aval2Vec = DoubleVector.broadcast(SPECIES, aval2);
 		DoubleVector aval3Vec = DoubleVector.broadcast(SPECIES, aval3);
 
-		//Rest
+		// Rest
 		for(; j < len % speciesLen; j++) {
 			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j] + aval3 * b[bi3 + j];
 		}
@@ -3878,12 +3895,12 @@ public class LibMatrixMult
 			res = aval1Vec.fma(b1Vec, res);
 			res = aval2Vec.fma(b2Vec, res);
 			res = aval3Vec.fma(b3Vec, res);
-			res.intoArray(c, ci+j);
+			res.intoArray(c, ci + j);
 		}
 	}
 
-	private static void vectMultiplyAdd4( final double aval1, final double aval2, final double aval3, final double aval4, double[] b, double[] c, int bi1, int bi2, int bi3, int bi4, int ci, final int len )
-	{
+	private static void vectMultiplyAdd4(final double aval1, final double aval2, final double aval3, final double aval4,
+		double[] b, double[] c, int bi1, int bi2, int bi3, int bi4, int ci, final int len) {
 		int j = 0;
 		int speciesLen = SPECIES.length();
 		DoubleVector res, b1Vec, b2Vec, b3Vec, b4Vec;
@@ -3901,17 +3918,17 @@ public class LibMatrixMult
 
 		// Iterate block-wise
 		for(; j < len; j += speciesLen) {
-			res = DoubleVector.fromArray(SPECIES, c, ci+j);
-			b1Vec = DoubleVector.fromArray(SPECIES, b, bi1+j);
-			b2Vec = DoubleVector.fromArray(SPECIES, b, bi2+j);
-			b3Vec = DoubleVector.fromArray(SPECIES, b, bi3+j);
-			b4Vec = DoubleVector.fromArray(SPECIES, b, bi4+j);
+			res = DoubleVector.fromArray(SPECIES, c, ci + j);
+			b1Vec = DoubleVector.fromArray(SPECIES, b, bi1 + j);
+			b2Vec = DoubleVector.fromArray(SPECIES, b, bi2 + j);
+			b3Vec = DoubleVector.fromArray(SPECIES, b, bi3 + j);
+			b4Vec = DoubleVector.fromArray(SPECIES, b, bi4 + j);
 
 			res = aval1Vec.fma(b1Vec, res); // compute res' = aval1 * b1 + res
 			res = aval2Vec.fma(b2Vec, res); // compute res' = aval2 * b2 + res
 			res = aval3Vec.fma(b3Vec, res); // compute res' = aval3 * b3 + res
 			res = aval4Vec.fma(b4Vec, res); // compute res' = aval4 * b4 + res => same principle as above
-			res.intoArray(c, ci+j);
+			res.intoArray(c, ci + j);
 		}
 	}
 
