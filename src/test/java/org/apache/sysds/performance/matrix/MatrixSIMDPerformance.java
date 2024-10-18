@@ -64,8 +64,8 @@ public class MatrixSIMDPerformance {
 				for(int col1 : col1Arr) { // Varying col sizes for lhs matrix/row sizes for rhs matrix
 					for(int col2 : col2Arr) { // Varying col sizes for rhs matrix
 						// Generate two random dense matrices
-						MatrixBlock m1 = MatrixBlock.randOperations(row, col1, sparsity1, 0, 10, "uniform", 7);
-						MatrixBlock m2 = MatrixBlock.randOperations(col1, col2, sparsity2, 0, 10, "uniform", 8);
+						MatrixBlock m1 = MatrixBlock.randOperations(row, col1, sparsity1, -10, 10, "uniform", 7);
+						MatrixBlock m2 = MatrixBlock.randOperations(col1, col2, sparsity2, -10, 10, "uniform", 8);
 						MatrixBlock retScalar = new MatrixBlock(m1.getNumRows(), m2.getNumColumns(), false);
 						MatrixBlock retSIMD = new MatrixBlock(m1.getNumRows(), m2.getNumColumns(), false);
 						MatrixBlock retMKL = new MatrixBlock(m1.getNumRows(), m2.getNumColumns(), false);
@@ -131,8 +131,8 @@ public class MatrixSIMDPerformance {
 		}
 	}
 
-	public static void matrixDivTest(double sparsity1, double sparsity2, double sparsity3, String rows, String cols,
-		int k, int warmupRuns) {
+	public static void matrixDivTest(double sparsity1, double sparsity2, double sparsity3, String rows1, String cols1,
+		String rows2, String cols2, int k, int warmupRuns) {
 		String outputPath = getOutputPathDivTest(sparsity1, sparsity2, sparsity3, k);
 
 		try {
@@ -142,54 +142,57 @@ public class MatrixSIMDPerformance {
 			throw new RuntimeException(e);
 		}
 
-		int[] rowArr = calculateSizes(rows);
-		int[] colArr = calculateSizes(cols);
+		int[] row1Arr = calculateSizes(rows1);
+		int[] col1Arr = calculateSizes(cols1);
+		int[] row2Arr = calculateSizes(rows2);
+		int[] col2Arr = calculateSizes(cols2);
 
-		startWarmupDivTest(sparsity1, sparsity2, sparsity3, rowArr[0], colArr[0], k, warmupRuns);
+		startWarmupDivTest(sparsity1, sparsity2, sparsity3, row1Arr[0], col1Arr[0], row2Arr[0], row2Arr[0], k, warmupRuns);
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
 			// Write CSV header
 			writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
 
-			for(int row : rowArr) { // Varying sizes for row
-				for(int col : colArr) { // Varying sizes for col
-					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity1, 0, 10, "uniform", 7);
-					MatrixBlock m2 = MatrixBlock.randOperations(row, col, sparsity2, 0, 10, "uniform", 8);
-					MatrixBlock retScalar, retSIMD;
-					if(sparsity3 == 0) {
-						retScalar = new MatrixBlock(row, col, true);
-						retSIMD = new MatrixBlock(row, col, true);
+			for(int row1 : row1Arr) { // Varying sizes for row lhs matrix
+				for(int col1 : col1Arr) { // Varying sizes for col lhs matrix
+					for(int row2 : row2Arr) {
+						for(int col2 : col2Arr) {
+							MatrixBlock m1 = MatrixBlock.randOperations(row1, col1, sparsity1, -10, 10, "uniform", 7);
+							MatrixBlock m2 = MatrixBlock.randOperations(row2, col2, sparsity2, -10, 10, "uniform", 8);
+							MatrixBlock retScalar, retSIMD = null;
+							retScalar = MatrixBlock.randOperations(row1, col1, sparsity3, -10, 10, "uniform", 9);
+							retSIMD = new MatrixBlock(row1, col1, true);
+							retScalar.copy(retSIMD);
+
+							avg1 = 0;
+							avg2 = 0;
+
+							for(int i = 0; i < 10; i++) {
+								t1 = System.nanoTime();
+								LibMatrixBincell.bincellOp(m1, m2, retScalar,
+									new BinaryOperator(Divide.getDivideFnObject()), k);
+								avg1 += (System.nanoTime() - t1) / 1000000;
+							}
+
+							for(int i = 0; i < 10; i++) {
+								t2 = System.nanoTime();
+								LibMatrixBincell2.bincellOp(m1, m2, retSIMD,
+									new BinaryOperator(Divide.getDivideFnObject()), k);
+								avg2 += (System.nanoTime() - t2) / 1000000;
+							}
+
+							avg1 /= 10;
+							avg2 /= 10;
+							resEqual1 = compareResults(retScalar, retSIMD, row1, col1);
+							improvement = Math.round(((avg1 - avg2) / avg1) * 100.0 * 100.0) / 100.0;
+
+							printStats(row1, col1, row2, col2, k, false, false);
+
+							// Write to csv
+							writer.append(row1 + "," + col1 + "," + row2 + "," + col2 + "," + k + "," + avg1 + ","
+								+ avg2 + "," + improvement + "\n");
+						}
 					}
-					else {
-						retScalar = MatrixBlock.randOperations(row, col, sparsity3, 0, 10, "uniform", 9);
-						retSIMD = MatrixBlock.randOperations(row, col, sparsity3, 0, 10, "uniform", 10);
-					}
-
-					avg1 = 0;
-					avg2 = 0;
-
-					for(int i = 0; i < 10; i++) {
-						t1 = System.nanoTime();
-						LibMatrixBincell.bincellOp(m1, m2, retScalar, new BinaryOperator(Divide.getDivideFnObject()),
-							k);
-						avg1 += (System.nanoTime() - t1) / 1000000;
-					}
-
-					for(int i = 0; i < 10; i++) {
-						t2 = System.nanoTime();
-						LibMatrixBincell2.bincellOp(m1, m2, retSIMD, new BinaryOperator(Divide.getDivideFnObject()), k);
-						avg2 += (System.nanoTime() - t2) / 1000000;
-					}
-
-					avg1 /= 10;
-					avg2 /= 10;
-					resEqual1 = compareResults(retScalar, retSIMD, row, col);
-					improvement = Math.round(((avg1 - avg2) / avg1) * 100.0 * 100.0) / 100.0;
-
-					printStats(row, col, row, col, k, false, false);
-
-					// Write to csv
-					writer.append(row + "," + col + "," + k + "," + avg1 + "," + avg2 + "," + improvement + "\n");
 				}
 			}
 		}
@@ -220,9 +223,9 @@ public class MatrixSIMDPerformance {
 
 			for(int row : rowArr) { // Varying sizes for row
 				for(int col : colArr) { // Varying sizes for col
-					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity, 0, 10, "uniform", 7);
+					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 7);
 					MatrixBlock retScalar = new MatrixBlock(row, col, false);
-					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, 0, 10, "uniform", 9);
+					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 9); //TODO: need to do it?
 					RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent);
 
 					avg1 = 0;
@@ -281,9 +284,9 @@ public class MatrixSIMDPerformance {
 
 			for(int row : rowArr) { // Varying sizes for row
 				for(int col : colArr) { // Varying sizes for col
-					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity, 0, 10, "uniform", 7);
+					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 7);
 					MatrixBlock retScalar = new MatrixBlock(row, col, false);
-					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, 0, 10, "uniform", 9);
+					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 9); // need to do it?
 
 					UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP));
 
@@ -324,8 +327,8 @@ public class MatrixSIMDPerformance {
 
 	private static void startWarmupMultTest(double sparsity1, double sparsity2, int rows, int cols1, int cols2, int k,
 		int warmupRuns) {
-		MatrixBlock m1 = MatrixBlock.randOperations(rows, cols1, sparsity1, 0, 10, "uniform", 7);
-		MatrixBlock m2 = MatrixBlock.randOperations(cols1, cols2, sparsity2, 0, 10, "uniform", 8);
+		MatrixBlock m1 = MatrixBlock.randOperations(rows, cols1, sparsity1, -10, 10, "uniform", 7);
+		MatrixBlock m2 = MatrixBlock.randOperations(cols1, cols2, sparsity2, -10, 10, "uniform", 8);
 		MatrixBlock ret = new MatrixBlock(rows, cols2, false);
 
 		boolean isValidForNative = !LibMatrixNative.isMatMultMemoryBound(m1.getNumRows(), m1.getNumColumns(),
@@ -342,11 +345,11 @@ public class MatrixSIMDPerformance {
 		}
 	}
 
-	private static void startWarmupDivTest(double sparsity1, double sparsity2, double sparsity3, int rows, int cols,
-		int k, int warmupRuns) {
-		MatrixBlock m1 = MatrixBlock.randOperations(rows, cols, sparsity1, 0, 10, "uniform", 7);
-		MatrixBlock m2 = MatrixBlock.randOperations(rows, cols, sparsity2, 0, 10, "uniform", 8);
-		MatrixBlock ret = MatrixBlock.randOperations(rows, cols, sparsity3, 0, 10, "uniform", 9);
+	private static void startWarmupDivTest(double sparsity1, double sparsity2, double sparsity3, int rows1, int cols1,
+		int rows2, int cols2, int k, int warmupRuns) {
+		MatrixBlock m1 = MatrixBlock.randOperations(rows1, cols1, sparsity1, -10, 10, "uniform", 7);
+		MatrixBlock m2 = MatrixBlock.randOperations(rows2, cols2, sparsity2, -10, 10, "uniform", 8);
+		MatrixBlock ret = MatrixBlock.randOperations(rows1, cols1, sparsity3, -10, 10, "uniform", 9); // SIMD: need to do randOperations?
 
 		for(int i = 0; i < warmupRuns; i++) {
 			LibMatrixBincell.bincellOp(m1, m2, ret, new BinaryOperator(Divide.getDivideFnObject()));
@@ -366,8 +369,7 @@ public class MatrixSIMDPerformance {
 	}
 
 	private static void startWarmupExpTest(double sparsity, int rows, int cols, int k, int warmupRuns) {
-		MatrixBlock m1 = MatrixBlock.randOperations(rows, cols, sparsity, 0, 10, "uniform", 7);
-		MatrixBlock ret;
+		MatrixBlock m1 = MatrixBlock.randOperations(rows, cols, sparsity, -10, 10, "uniform", 7);
 		UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP));
 
 		for(int i = 0; i < warmupRuns; i++) {
@@ -418,8 +420,11 @@ public class MatrixSIMDPerformance {
 	}
 
 	public static boolean compareResults(MatrixBlock mb1, MatrixBlock mb2, int rows, int cols) {
-		if(mb1.getNonZeros() != mb2.getNonZeros())
+		if(mb1.getNonZeros() != mb2.getNonZeros()) {
+			System.out.println("non-zeroes: " + mb1.getNonZeros() + " != " + mb2.getNonZeros());
 			return false;
+		}
+
 
 		for(int i = 0; i < rows; i++) {
 			for(int j = 0; j < cols; j++) {

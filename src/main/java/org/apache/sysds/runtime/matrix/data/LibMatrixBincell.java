@@ -601,7 +601,6 @@ public class LibMatrixBincell {
 	private static long safeBinary(MatrixBlock m1, MatrixBlock m2, MatrixBlock ret, BinaryOperator op,
 		BinaryAccessType atype, int rl, int ru)
 	{
-		System.out.println("safeBinary Scalar");
 		//NOTE: multi-threaded over rl-ru only applied for matrix-matrix, non-empty
 		
 		boolean skipEmpty = (op.fn instanceof Multiply 
@@ -1409,7 +1408,7 @@ public class LibMatrixBincell {
 		return lnnz;
 	}
 
-		private static final long safeBinaryMMDenseDenseDenseContiguous(DenseBlock da, DenseBlock db, DenseBlock dc, BinaryOperator op,
+	private static final long safeBinaryMMDenseDenseDenseContiguous(DenseBlock da, DenseBlock db, DenseBlock dc, BinaryOperator op,
 		int rl, int ru, int clen) {
 		long lnnz = 0;
 		final double[] a = da.values(0);
