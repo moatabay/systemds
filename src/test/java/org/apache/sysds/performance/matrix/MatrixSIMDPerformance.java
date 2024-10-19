@@ -147,7 +147,7 @@ public class MatrixSIMDPerformance {
 		int[] row2Arr = calculateSizes(rows2);
 		int[] col2Arr = calculateSizes(cols2);
 
-		startWarmupDivTest(sparsity1, sparsity2, sparsity3, row1Arr[0], col1Arr[0], row2Arr[0], row2Arr[0], k, warmupRuns);
+		startWarmupDivTest(sparsity1, sparsity2, sparsity3, row1Arr[0], col1Arr[0], row2Arr[0], col2Arr[0], k, warmupRuns);
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
 			// Write CSV header
@@ -226,7 +226,7 @@ public class MatrixSIMDPerformance {
 					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 7);
 					MatrixBlock retScalar = new MatrixBlock(row, col, false);
 					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 9); //TODO: need to do it?
-					RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent);
+					RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent, k);
 
 					avg1 = 0;
 					avg2 = 0;
@@ -288,7 +288,7 @@ public class MatrixSIMDPerformance {
 					MatrixBlock retScalar = new MatrixBlock(row, col, false);
 					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 9); // need to do it?
 
-					UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP));
+					UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP), k);
 
 					avg1 = 0;
 					avg2 = 0;
@@ -349,18 +349,18 @@ public class MatrixSIMDPerformance {
 		int rows2, int cols2, int k, int warmupRuns) {
 		MatrixBlock m1 = MatrixBlock.randOperations(rows1, cols1, sparsity1, -10, 10, "uniform", 7);
 		MatrixBlock m2 = MatrixBlock.randOperations(rows2, cols2, sparsity2, -10, 10, "uniform", 8);
-		MatrixBlock ret = MatrixBlock.randOperations(rows1, cols1, sparsity3, -10, 10, "uniform", 9); // SIMD: need to do randOperations?
+		MatrixBlock ret = MatrixBlock.randOperations(rows1, cols1, sparsity3, -10, 10, "uniform", 9);
 
 		for(int i = 0; i < warmupRuns; i++) {
-			LibMatrixBincell.bincellOp(m1, m2, ret, new BinaryOperator(Divide.getDivideFnObject()));
-			LibMatrixBincell2.bincellOp(m1, m2, ret, new BinaryOperator(Divide.getDivideFnObject()));
+			LibMatrixBincell.bincellOp(m1, m2, ret, new BinaryOperator(Divide.getDivideFnObject(), k));
+			LibMatrixBincell2.bincellOp(m1, m2, ret, new BinaryOperator(Divide.getDivideFnObject(), k));
 		}
 	}
 
 	private static void startWarmupPowerTest(double sparsity, int rows, int cols, double exponent, int k,
 		int warmupRuns) {
 		MatrixBlock m1 = MatrixBlock.randOperations(rows, cols, sparsity, 0, 10, "uniform", 7);
-		RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent);
+		RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent, k);
 
 		for(int i = 0; i < warmupRuns; i++) {
 			m1.scalarOperations(powerOpK, new MatrixBlock());
@@ -370,7 +370,7 @@ public class MatrixSIMDPerformance {
 
 	private static void startWarmupExpTest(double sparsity, int rows, int cols, int k, int warmupRuns) {
 		MatrixBlock m1 = MatrixBlock.randOperations(rows, cols, sparsity, -10, 10, "uniform", 7);
-		UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP));
+		UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP), k);
 
 		for(int i = 0; i < warmupRuns; i++) {
 			m1.unaryOperations(expOperator, new MatrixBlock());
