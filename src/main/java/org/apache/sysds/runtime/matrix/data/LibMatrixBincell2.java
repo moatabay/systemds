@@ -208,7 +208,6 @@ public class LibMatrixBincell2 {
 		if(atype == BinaryAccessType.MATRIX_MATRIX && !(m1.isEmpty() || m2.isEmpty())) {
 			ret.allocateBlock(); // chosen outside
 		}
-
 		// execute binary cell operations
 		long nnz = 0;
 		if(op.sparseSafe || isSparseSafeDivide(op, m2))
@@ -692,6 +691,7 @@ public class LibMatrixBincell2 {
 		int rl, int ru) {
 		final boolean multiply = (op.fn instanceof Multiply);
 		final int clen = m1.clen;
+		System.out.println("safeBinaryMVDenseColVector");
 
 		final DenseBlock da = m1.getDenseBlock();
 		if(da.values(0) == null)
@@ -800,7 +800,7 @@ public class LibMatrixBincell2 {
 			for(int i = rl + 1; i < ru; i++)
 				dc.set(i, c);
 		}
-		else // default case (incl right empty) // TODO: This?
+		else // default case (incl right empty)
 		{
 			DoubleVector aVec, bVec, res;
 
@@ -940,12 +940,13 @@ public class LibMatrixBincell2 {
 					}
 					
 					for(; j < len; j += speciesLen) {
-						// TODO: fillZeroValues ?
+						fillZeroValues(op, v2, ret, skipEmpty, i, lastIx + 1, aix[j]);
+
 						aVec = DoubleVector.fromArray(SPECIES, avals, j);
 						res = aVec.div(bVec);
 
 						for(int k = 0; k < speciesLen; k++) {
-							ret.appendValue(i, aix[j], res.lane(k));
+							ret.appendValue(i, aix[j + k], res.lane(k));
 						}
 						lastIx = aix[j];
 					}
@@ -995,17 +996,17 @@ public class LibMatrixBincell2 {
 				}
 
 				for(; j < len; j += speciesLen) {
-					// TODO: fillZeroValues ?
-					aVec = DoubleVector.fromArray(SPECIES, avals, j); // this might cause issues
-					bVec = DoubleVector.fromArray(SPECIES, bvals, aix[j]);
+					// empty left
+					fillZeroValues(op, m2, ret, skipEmpty, i, lastIx + 1, aix[j]);
+
+					aVec = DoubleVector.fromArray(SPECIES, avals, j);
+					bVec = DoubleVector.fromArray(SPECIES, bvals, 0, aix, j);
 					res = aVec.div(bVec);
 
 					for(int k = 0; k < speciesLen; k++) {
-						ret.appendValue(i, aix[j], res.lane(k));
+						ret.appendValue(i, aix[j + k], res.lane(k));
 					}
 
-					// Note: In order to implement the inner loop with simd we would need a double array derived from ret matrix (row: i)
-					// then we could save the values in ret; theoretically we have the index map given by a/cix
 					lastIx = aix[j];
 				}
 			}
@@ -1514,7 +1515,6 @@ public class LibMatrixBincell2 {
 		long lnnz = 0;
 
 		DoubleVector aVec, bVec, res;
-		System.out.println("safeBinaryMMDenseDenseDenseGeneric");
 
 		for(int i = rl; i < ru; i++) {
 			final double[] a = da.values(i);
@@ -1532,14 +1532,12 @@ public class LibMatrixBincell2 {
 			}
 
 			for(; j < len; j += speciesLen) {
-				aVec = DoubleVector.fromArray(SPECIES, a, i);
-				bVec = DoubleVector.fromArray(SPECIES, b, i);
+				aVec = DoubleVector.fromArray(SPECIES, a, j);
+				bVec = DoubleVector.fromArray(SPECIES, b, j);
 				res = aVec.div(bVec);
-				res.intoArray(c, i);
+				res.intoArray(c, j);
 
-				for(int k = 0; k < speciesLen; k++) {
-					lnnz += (res.lane(k) != 0) ? 1 : 0;
-				}
+				lnnz += res.compare(VectorOperators.NE, 0).trueCount();
 			}
 		}
 		return lnnz;
@@ -1553,7 +1551,10 @@ public class LibMatrixBincell2 {
 
 		// prepare second input and allocate output
 		MatrixBlock b = m1.sparse ? m2 : m1;
-		DenseBlock bDenseBlock = b.getDenseBlock();
+		double[] bvals = b.getDenseBlockValues();
+		int bRows = m2.getNumRows();
+		DoubleVector aVec, bVec, res;
+		VectorMask<Double> mask;
 
 		// guard for postponed allocation in single-threaded exec
 		if(!ret.isAllocated())
@@ -1568,14 +1569,12 @@ public class LibMatrixBincell2 {
 			int alen = a.size(i);
 			int[] aix = a.indexes(i);
 			double[] avals = a.values(i);
-			double[] bvals = bDenseBlock.values(i);
 
 			if(ret.sparse && !b.sparse)
 				ret.sparseBlock.allocate(i, alen);
 
 			int len = apos + alen;
 			int max = len % speciesLen;
-			DoubleVector aVec, bVec, res;
 
 			int k = apos;
 			for(; k < max; k++) {
@@ -1587,16 +1586,20 @@ public class LibMatrixBincell2 {
 				ret.appendValuePlain(i, aix[k], val);
 			}
 
-			for(; k < len; k+= speciesLen) {
-				// TODO: Implement VectorMask here?
+			for (; k < len; k += speciesLen) {
 				aVec = DoubleVector.fromArray(SPECIES, avals, k);
-				bVec = DoubleVector.fromArray(SPECIES, bvals, aix[k]);
+				bVec = DoubleVector.fromArray(SPECIES, bvals, i*bRows, aix, k);
+
+				mask = bVec.compare(VectorOperators.NE, 0.0); // True where the value is != 0
 				res = aVec.div(bVec);
 
-				for(int l = 0; l < speciesLen; l++) {
-					val = res.lane(l);
-					lnnz += (val != 0) ? 1 : 0;
-					ret.appendValuePlain(i, aix[k], val);
+				// Store results where the mask allows
+				for (int l = 0; l < speciesLen; l++) {
+					if (mask.laneIsSet(l)) {  // Only append non-zero results
+						val = res.lane(l);
+						lnnz += (val != 0) ? 1 : 0;
+						ret.appendValuePlain(i, aix[k + l], val);
+					}
 				}
 			}
 		}
@@ -1941,8 +1944,7 @@ public class LibMatrixBincell2 {
 				aVec = DoubleVector.fromArray(SPECIES, a, i);
 				res = aVec.lanewise(VectorOperators.POW, exponent);
 				res.intoArray(c, i);
-				for(int k = 0; k < speciesLen; k++)
-					nnz += (res.lane(k) != 0) ? 1 : 0;
+				nnz += res.compare(VectorOperators.NE, 0).trueCount();
 			}
 		}
 		else { // MULTI-COL MATRIX
@@ -1963,8 +1965,7 @@ public class LibMatrixBincell2 {
 					aVec = DoubleVector.fromArray(SPECIES, a, apos + j);
 					res = aVec.lanewise(VectorOperators.POW, exponent);
 					res.intoArray(c, cpos + j);
-					for(int k = 0; k < speciesLen; k++)
-						nnz += (res.lane(k) != 0) ? 1 : 0;
+					nnz += res.compare(VectorOperators.NE, 0).trueCount();
 				}
 			}
 		}

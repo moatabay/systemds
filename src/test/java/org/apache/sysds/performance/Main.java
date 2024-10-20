@@ -367,7 +367,7 @@ public class Main {
 		// Matrix Div test
 		double sparsity1 = Double.parseDouble(args[1]);
 		double sparsity2 = Double.parseDouble(args[2]);
-		double sparsity3 = Double.parseDouble(args[3]);
+		boolean sparseRet = args[3].equalsIgnoreCase("true");
 		String rows1 = args[4];
 		String cols1 = args[5];
 		String rows2 = args[6];
@@ -375,7 +375,7 @@ public class Main {
 		int k = Integer.parseInt(args[8]);
 		int warmupRuns = Integer.parseInt(args[9]);
 
-		matrixDivTest(sparsity1, sparsity2, sparsity3, rows1, cols1, rows2, cols2, k, warmupRuns);
+		matrixDivTest(sparsity1, sparsity2, sparseRet, rows1, cols1, rows2, cols2, k, warmupRuns);
 	}
 
 	private static void run2002(String[] args) {

@@ -131,9 +131,9 @@ public class MatrixSIMDPerformance {
 		}
 	}
 
-	public static void matrixDivTest(double sparsity1, double sparsity2, double sparsity3, String rows1, String cols1,
+	public static void matrixDivTest(double sparsity1, double sparsity2, boolean sparseRet, String rows1, String cols1,
 		String rows2, String cols2, int k, int warmupRuns) {
-		String outputPath = getOutputPathDivTest(sparsity1, sparsity2, sparsity3, k);
+		String outputPath = getOutputPathDivTest(sparsity1, sparsity2, sparseRet, k);
 
 		try {
 			Files.createDirectories(Paths.get(BASE_PATH));
@@ -147,7 +147,7 @@ public class MatrixSIMDPerformance {
 		int[] row2Arr = calculateSizes(rows2);
 		int[] col2Arr = calculateSizes(cols2);
 
-		startWarmupDivTest(sparsity1, sparsity2, sparsity3, row1Arr[0], col1Arr[0], row2Arr[0], col2Arr[0], k, warmupRuns);
+		startWarmupDivTest(sparsity1, sparsity2, sparseRet, row1Arr[0], col1Arr[0], row2Arr[0], col2Arr[0], k, warmupRuns);
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
 			// Write CSV header
@@ -159,15 +159,15 @@ public class MatrixSIMDPerformance {
 						for(int col2 : col2Arr) {
 							MatrixBlock m1 = MatrixBlock.randOperations(row1, col1, sparsity1, -10, 10, "uniform", 7);
 							MatrixBlock m2 = MatrixBlock.randOperations(row2, col2, sparsity2, -10, 10, "uniform", 8);
-							MatrixBlock retScalar, retSIMD = null;
-							retScalar = MatrixBlock.randOperations(row1, col1, sparsity3, -10, 10, "uniform", 9);
-							retSIMD = new MatrixBlock(row1, col1, true);
-							retScalar.copy(retSIMD);
+							MatrixBlock retScalar, retSIMD;
+							retScalar = new MatrixBlock(row1, col1, sparseRet);
+							retSIMD = new MatrixBlock(row1, col1, sparseRet);
 
 							avg1 = 0;
 							avg2 = 0;
 
 							for(int i = 0; i < 10; i++) {
+								retScalar.reset(row1, col1, sparseRet);
 								t1 = System.nanoTime();
 								LibMatrixBincell.bincellOp(m1, m2, retScalar,
 									new BinaryOperator(Divide.getDivideFnObject()), k);
@@ -175,6 +175,7 @@ public class MatrixSIMDPerformance {
 							}
 
 							for(int i = 0; i < 10; i++) {
+								retSIMD.reset(row1, col1, sparseRet);
 								t2 = System.nanoTime();
 								LibMatrixBincell2.bincellOp(m1, m2, retSIMD,
 									new BinaryOperator(Divide.getDivideFnObject()), k);
@@ -345,15 +346,16 @@ public class MatrixSIMDPerformance {
 		}
 	}
 
-	private static void startWarmupDivTest(double sparsity1, double sparsity2, double sparsity3, int rows1, int cols1,
+	private static void startWarmupDivTest(double sparsity1, double sparsity2, boolean sparseRet, int rows1, int cols1,
 		int rows2, int cols2, int k, int warmupRuns) {
 		MatrixBlock m1 = MatrixBlock.randOperations(rows1, cols1, sparsity1, -10, 10, "uniform", 7);
 		MatrixBlock m2 = MatrixBlock.randOperations(rows2, cols2, sparsity2, -10, 10, "uniform", 8);
-		MatrixBlock ret = MatrixBlock.randOperations(rows1, cols1, sparsity3, -10, 10, "uniform", 9);
+		MatrixBlock ret = new MatrixBlock(rows1, cols1 , sparseRet);
 
 		for(int i = 0; i < warmupRuns; i++) {
 			LibMatrixBincell.bincellOp(m1, m2, ret, new BinaryOperator(Divide.getDivideFnObject(), k));
 			LibMatrixBincell2.bincellOp(m1, m2, ret, new BinaryOperator(Divide.getDivideFnObject(), k));
+			ret.reset(rows1, cols1, sparseRet);
 		}
 	}
 
@@ -382,9 +384,9 @@ public class MatrixSIMDPerformance {
 		return BASE_PATH + "perfMult_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_k=" + k + ".csv";
 	}
 
-	public static String getOutputPathDivTest(double sparsity1, double sparsity2, double sparsity3, int k) {
+	public static String getOutputPathDivTest(double sparsity1, double sparsity2, boolean sparseRet, int k) {
 		// TODO: add different names for plots for different div cases
-		return BASE_PATH + "perfDiv_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_s3=" + sparsity3
+		return BASE_PATH + "perfDiv_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_s3=" + sparseRet
 			+ "_k=" + k + ".csv";
 	}
 
@@ -425,11 +427,10 @@ public class MatrixSIMDPerformance {
 			return false;
 		}
 
-
 		for(int i = 0; i < rows; i++) {
 			for(int j = 0; j < cols; j++) {
 				if(Math.abs(mb1.get(i, j) - mb2.get(i, j)) > EPSILON) {
-					System.out.println(mb1.get(i, j) + " is not equals " + mb2.get(i, j));
+					System.out.println("i=" + i + " j=" + j + ":" + mb1.get(i, j) + " is not equals " + mb2.get(i, j));
 					return false;
 				}
 			}
