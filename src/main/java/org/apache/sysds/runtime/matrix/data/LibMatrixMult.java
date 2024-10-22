@@ -1530,7 +1530,8 @@ public class LibMatrixMult
 		//output - however, in this case it's unlikely that we consume every cache line in the rhs
 		final int blocksizeI = (int) (8L*xsp);
 		final int blocksizeK = (int) (8L*xsp);
-		final int blocksizeJ = 1024; 
+		final int blocksizeJ = 1024;
+		System.out.println("matrixMultSparseDenseMM");
 		
 		//temporary array of current sparse positions
 		int[] curk = new int[Math.min(blocksizeI, ru-rl)];
@@ -3705,11 +3706,11 @@ public class LibMatrixMult
 	// note: public for use by codegen for consistency
 	public static double dotProduct(double[] a, double[] b, int ai, int bi, final int len) {
 		double val = 0;
-		int i = 0;
 		int bn = len % speciesLen;
 		DoubleVector aVec, bVec;
 
 		// compute rest
+		int i = 0;
 		for(; i < bn; i++)
 			val += a[ai + i] * b[bi + i];
 
@@ -3718,6 +3719,7 @@ public class LibMatrixMult
 			aVec = DoubleVector.fromArray(SPECIES, a, ai + i);
 			bVec = DoubleVector.fromArray(SPECIES, b, bi + i);
 			val += aVec.mul(bVec).reduceLanes(VectorOperators.ADD);
+			// TODO: Alternative implementation in scalar way?
 		}
 
 		return val;
@@ -3726,11 +3728,11 @@ public class LibMatrixMult
 	// note: public for use by codegen for consistency
 	public static double dotProduct(double[] a, double[] b, int[] aix, int ai, final int bi, final int len) {
 		double val = 0;
-		int i = ai;
 		int bn = len % speciesLen;
 		DoubleVector aVec, bVec;
 
 		// compute rest
+		int i = ai;
 		for(; i < ai + bn; i++)
 			val += a[i] * b[bi + aix[i]];
 
@@ -3777,11 +3779,11 @@ public class LibMatrixMult
 
 	//note: public for use by codegen for consistency
 	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int bi, int ci, final int len) {
-		int j = 0;
 		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
 		DoubleVector res, bVec;
 
 		// Rest loop to handle elements that don't fit into full vector size
+		int j = 0;
 		for(; j < len % speciesLen; j++) {
 			c[ci + j] += aval * b[bi + j];
 		}
@@ -3798,7 +3800,6 @@ public class LibMatrixMult
 
 	private static void vectMultiplyAdd2(final double aval1, final double aval2, double[] b, double[] c, int bi1,
 		int bi2, int ci, final int len) {
-		int j = 0;
 		DoubleVector res, b1Vec, b2Vec;
 
 		// Create DoubleVectors that only contains values aval1 and aval2 respectively
@@ -3806,6 +3807,7 @@ public class LibMatrixMult
 		DoubleVector aval2Vec = DoubleVector.broadcast(SPECIES, aval2);
 
 		// Rest
+		int j = 0;
 		for(; j < len % speciesLen; j++) {
 			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j];
 		}
@@ -3824,7 +3826,6 @@ public class LibMatrixMult
 
 	private static void vectMultiplyAdd3(final double aval1, final double aval2, final double aval3, double[] b,
 		double[] c, int bi1, int bi2, int bi3, int ci, final int len) {
-		int j = 0;
 		DoubleVector res, b1Vec, b2Vec, b3Vec;
 
 		// Create DoubleVectors that only contains values aval1, aval2 and aval3 respectively
@@ -3833,6 +3834,7 @@ public class LibMatrixMult
 		DoubleVector aval3Vec = DoubleVector.broadcast(SPECIES, aval3);
 
 		// Rest
+		int j = 0;
 		for(; j < len % speciesLen; j++) {
 			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j] + aval3 * b[bi3 + j];
 		}
@@ -3853,7 +3855,6 @@ public class LibMatrixMult
 
 	private static void vectMultiplyAdd4(final double aval1, final double aval2, final double aval3, final double aval4,
 		double[] b, double[] c, int bi1, int bi2, int bi3, int bi4, int ci, final int len) {
-		int j = 0;
 		DoubleVector res, b1Vec, b2Vec, b3Vec, b4Vec;
 
 		// Create DoubleVectors that only contains values aval1, aval2, aval3 and aval4 respectively
@@ -3863,6 +3864,7 @@ public class LibMatrixMult
 		DoubleVector aval4Vec = DoubleVector.broadcast(SPECIES, aval4);
 
 		// Rest
+		int j = 0;
 		for(; j < len % speciesLen; j++) {
 			c[ci + j] += aval1 * b[bi1 + j] + aval2 * b[bi2 + j] + aval3 * b[bi3 + j] + aval4 * b[bi4 + j];
 		}
@@ -3912,12 +3914,12 @@ public class LibMatrixMult
 
 	// note: public for use by codegen for consistency
 	public static void vectMultiplyAdd(final double aval, double[] b, double[] c, int[] bix, int bi, int ci, int len) {
-		int j = bi;
 		int bn = len % speciesLen;
 		DoubleVector avalVec = DoubleVector.broadcast(SPECIES, aval);
 		DoubleVector bVec, res;
 
 		// Rest
+		int j = bi;
 		for(; j < bi + bn; j++) {
 			c[ci + bix[j]] += aval * b[j];
 		}

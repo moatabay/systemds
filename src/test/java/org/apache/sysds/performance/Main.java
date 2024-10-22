@@ -30,10 +30,7 @@ import org.apache.sysds.performance.generators.FrameTransformFile;
 import org.apache.sysds.performance.generators.GenMatrices;
 import org.apache.sysds.performance.generators.IGenerate;
 import org.apache.sysds.performance.generators.MatrixFile;
-import org.apache.sysds.performance.matrix.MatrixMulPerformance;
-import org.apache.sysds.performance.matrix.MatrixStorage;
-import org.apache.sysds.performance.matrix.SparseAppend;
-import org.apache.sysds.performance.matrix.VectorAndFFMAPIPerformance;
+import org.apache.sysds.performance.matrix.*;
 import org.apache.sysds.runtime.data.SparseBlock;
 import org.apache.sysds.runtime.frame.data.FrameBlock;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
@@ -133,6 +130,9 @@ public class Main {
 				break;
 			case 2003:
 				run2003(args);
+				break;
+			case 2004:
+				run2004(args);
 				break;
 			case 2010:
 				run2010(args);
@@ -399,6 +399,10 @@ public class Main {
 		int warmupRuns = Integer.parseInt(args[5]);
 
 		matrixExpTest(sparsity, rows, cols, k, warmupRuns);
+	}
+
+	private static void run2004(String[] args) {
+		FFMPerformance.test();
 	}
 
 	// ##############################

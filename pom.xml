@@ -77,7 +77,7 @@
 		<jacoco.skip>false</jacoco.skip>
 		<jacoco.include>**</jacoco.include>
 		<automatedtestbase.outputbuffering>false</automatedtestbase.outputbuffering>
-		<argLine>-Xms3000m -Xmx3000m -Xmn300m --add-modules=jdk.incubator.vector</argLine>
+		<argLine>-Xms3000m -Xmx3000m -Xmn300m --add-modules=jdk.incubator.vector --enable-preview</argLine>
 		<enableStats>false</enableStats>
 	</properties>
 
@@ -322,6 +322,9 @@
 						<arg>-Xlint:unchecked</arg>
 						<arg>--add-modules</arg>
 						<arg>jdk.incubator.vector</arg>
+						<arg>--enable-preview</arg>
+						<arg>--release</arg>
+						<arg>21</arg>
 					</compilerArgs>
 					<source>${java.level}</source>
 					<target>${java.level}</target>

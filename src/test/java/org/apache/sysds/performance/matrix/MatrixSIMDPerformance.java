@@ -58,7 +58,7 @@ public class MatrixSIMDPerformance {
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
 			// Write CSV header
-			writer.append("rows1,cols1,cols2,k,time_scalar,time_simd,time_mkl,improvement\n");
+			writer.append("rows1,cols1,cols2,k,time_scalar,time_simd,time_mkl,improvement,correctness\n");
 
 			for(int row : rowArr) { // Varying row sizes for lhs matrix
 				for(int col1 : col1Arr) { // Varying col sizes for lhs matrix/row sizes for rhs matrix
@@ -77,14 +77,14 @@ public class MatrixSIMDPerformance {
 						// Measure execution time for the scalar multiplication.
 						for(int i = 0; i < 10; i++) {
 							t1 = System.nanoTime();
-							retScalar = LibMatrixMult2.matrixMult(m1, m2, k);
+							LibMatrixMult2.matrixMult(m1, m2, retScalar, k);
 							avg1 += (System.nanoTime() - t1) / 1000000;
 						}
 
 						// Measure execution time for the SIMD multiplication.
 						for(int i = 0; i < 10; i++) {
 							t2 = System.nanoTime();
-							retSIMD = LibMatrixMult.matrixMult(m1, m2, k); // SIMD
+							LibMatrixMult.matrixMult(m1, m2, retSIMD, k); // SIMD
 							avg2 += (System.nanoTime() - t2) / 1000000;
 						}
 
@@ -116,11 +116,11 @@ public class MatrixSIMDPerformance {
 						// Write to csv
 						if(isValidForNative) {
 							writer.append(row + "," + col1 + "," + col2 + "," + k + "," + avg1 + "," + avg2 + "," + avg3
-								+ "," + improvement + "\n");
+								+ "," + improvement + "," + (resEqual1 && resEqual2) + "\n");
 						}
 						else {
 							writer.append(row + "," + col1 + "," + col2 + "," + k + "," + avg1 + "," + avg2 + "," + -1.0
-								+ "," + improvement + "\n");
+								+ "," + improvement + "," + resEqual1 + "\n");
 						}
 					}
 				}
@@ -151,7 +151,7 @@ public class MatrixSIMDPerformance {
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
 			// Write CSV header
-			writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
+			writer.append("rows1,cols1,rows2,cols2,k,time_scalar,time_simd,improvement,correctness\n");
 
 			for(int row1 : row1Arr) { // Varying sizes for row lhs matrix
 				for(int col1 : col1Arr) { // Varying sizes for col lhs matrix
@@ -191,7 +191,7 @@ public class MatrixSIMDPerformance {
 
 							// Write to csv
 							writer.append(row1 + "," + col1 + "," + row2 + "," + col2 + "," + k + "," + avg1 + ","
-								+ avg2 + "," + improvement + "\n");
+								+ avg2 + "," + improvement + "," + resEqual1 + "\n");
 						}
 					}
 				}
@@ -220,13 +220,13 @@ public class MatrixSIMDPerformance {
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
 			// Write CSV header
-			writer.append("rows,cols,k,time_scalar,time_simd,improvement\n");
+			writer.append("rows,cols,k,time_scalar,time_simd,improvement,correctness\n");
 
 			for(int row : rowArr) { // Varying sizes for row
 				for(int col : colArr) { // Varying sizes for col
 					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 7);
 					MatrixBlock retScalar = new MatrixBlock(row, col, false);
-					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 9); //TODO: need to do it?
+					MatrixBlock retSIMD = new MatrixBlock(row, col, false);
 					RightScalarOperator powerOpK = new RightScalarOperator(Power.getPowerFnObject(), exponent, k);
 
 					avg1 = 0;
@@ -254,7 +254,7 @@ public class MatrixSIMDPerformance {
 					printStats(row, col, 0, 0, k, false, true);
 
 					// Write to csv
-					writer.append(row + "," + col + "," + k + "," + avg1 + "," + avg2 + "," + improvement + "\n");
+					writer.append(row + "," + col + "," + k + "," + avg1 + "," + avg2 + "," + improvement + "," + resEqual1 + "\n");
 				}
 			}
 		}
@@ -316,7 +316,7 @@ public class MatrixSIMDPerformance {
 					printStats(row, col, 0, 0, k, false, true);
 
 					// Write to csv
-					writer.append(row + "," + col + "," + k + "," + avg1 + "," + avg2 + "," + improvement + "\n");
+					writer.append(row + "," + col + "," + k + "," + avg1 + "," + avg2 + "," + improvement + "," + resEqual1 + "\n");
 				}
 			}
 		}

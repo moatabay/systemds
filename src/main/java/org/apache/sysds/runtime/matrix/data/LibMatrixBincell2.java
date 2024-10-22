@@ -495,8 +495,9 @@ public class LibMatrixBincell2 {
 		final int m = m1.rlen;
 		final int n = m1.clen;
 
-		if(m1.sparse && ret.sparse) // SPARSE <- SPARSE
+		if(m1.sparse && ret.sparse) // SPARSE <- SPARSE //TODO: This as well? Can that even be called in exp?
 		{
+			System.out.println("m1.sparse && ret.sparse");
 			ret.allocateSparseRowsBlock();
 			SparseBlock a = m1.sparseBlock;
 			SparseBlock c = ret.sparseBlock;
@@ -579,8 +580,8 @@ public class LibMatrixBincell2 {
 				int max = len % speciesLen;
 				DoubleVector aVec;
 
-				int i = 0;
 				// Rest
+				int i = 0;
 				for(; i < max; i++) {
 					c[i] = op.fn.execute(a[i]);
 					nnz += (c[i] != 0) ? 1 : 0;
@@ -691,7 +692,6 @@ public class LibMatrixBincell2 {
 		int rl, int ru) {
 		final boolean multiply = (op.fn instanceof Multiply);
 		final int clen = m1.clen;
-		System.out.println("safeBinaryMVDenseColVector");
 
 		final DenseBlock da = m1.getDenseBlock();
 		if(da.values(0) == null)
@@ -1256,7 +1256,6 @@ public class LibMatrixBincell2 {
 
 	private static long safeBinaryMMSparseSparse(MatrixBlock m1, MatrixBlock m2, MatrixBlock ret, BinaryOperator op,
 		int rl, int ru) {
-		System.out.println("safeBinaryMMSparseSparse");
 		// guard for postponed allocation in single-threaded exec
 		if(ret.sparse && !ret.isAllocated())
 			ret.allocateSparseRowsBlock();
@@ -1482,14 +1481,13 @@ public class LibMatrixBincell2 {
 		final double[] c = dc.values(0);
 
 		int len = da.pos(ru);
-
-		int max = len % speciesLen;
-
+		int max = (da.pos(ru) - da.pos(rl)) % speciesLen;
 		DoubleVector aVec, bVec, cVec, res;
 
-		int i = da.pos(rl);
 		// Rest
-		for(; i < max; i++) {
+		int i = da.pos(rl);
+
+		for(; i < da.pos(rl) + max; i++) {
 			c[i] += op.fn.execute(a[i], b[i]);
 			lnnz += (c[i] != 0) ? 1 : 0;
 		}
@@ -1499,7 +1497,9 @@ public class LibMatrixBincell2 {
 			aVec = DoubleVector.fromArray(SPECIES, a, i);
 			bVec = DoubleVector.fromArray(SPECIES, b, i);
 			cVec = DoubleVector.fromArray(SPECIES, c, i);
-			res = aVec.div(bVec).add(cVec); // No way of doing that in a single fused instruction like fma
+			// No way of doing that in a single fused instruction like fma, div and add needs to be done separately
+			res = aVec.div(bVec);
+			res = res.add(cVec);
 			res.intoArray(c, i);
 
 			lnnz += res.compare(VectorOperators.NE, 0).trueCount(); // Count lnnz
@@ -1588,6 +1588,7 @@ public class LibMatrixBincell2 {
 
 			for (; k < len; k += speciesLen) {
 				aVec = DoubleVector.fromArray(SPECIES, avals, k);
+				// Needs to be done this way, doing it via b.values(i) is broken in this specific case.
 				bVec = DoubleVector.fromArray(SPECIES, bvals, i*bRows, aix, k);
 
 				mask = bVec.compare(VectorOperators.NE, 0.0); // True where the value is != 0
@@ -1817,9 +1818,9 @@ public class LibMatrixBincell2 {
 					int max = len % speciesLen;
 					DoubleVector aVec, res;
 
-					int j = apos;
 					// Rest
-					for(; j < max; j++) {
+					int j = apos;
+					for(; j < apos + max; j++) {
 						val = op.executeScalar(avals[j]);
 						c.append(r, aix[j], val);
 						nnz += (val != 0) ? 1 : 0;
@@ -1921,8 +1922,8 @@ public class LibMatrixBincell2 {
 		DenseBlock dc = ret.getDenseBlock();
 		int clen = m1.clen;
 
-		int max = ru % speciesLen;
 		int i = rl;
+		int max;
 		double exponent = op.getConstant();
 
 		DoubleVector aVec, res;
@@ -1933,8 +1934,9 @@ public class LibMatrixBincell2 {
 			double[] a = da.valuesAt(0);
 			double[] c = dc.valuesAt(0);
 
+			max = (ru - rl) % speciesLen;
 			// Rest
-			for(; i < max; i++) { // VECTOR
+			for(; i < rl + max; i++) { // VECTOR
 				c[i] = op.executeScalar(a[i]);
 				nnz += (c[i] != 0) ? 1 : 0;
 			}
@@ -1954,9 +1956,9 @@ public class LibMatrixBincell2 {
 				double[] c = dc.values(i);
 				int apos = da.pos(i), cpos = dc.pos(i);
 
-				int maxClen = clen % speciesLen;
+				max = clen % speciesLen;
 				int j = 0;
-				for(; j < maxClen; j++) {
+				for(; j < max; j++) {
 					c[cpos + j] = op.executeScalar(a[apos + j]);
 					nnz += (c[cpos + j] != 0) ? 1 : 0;
 				}
@@ -2472,14 +2474,26 @@ public class LibMatrixBincell2 {
 		@Override
 		public Long call() {
 			long nnz = 0;
+
+			DoubleVector aVec, res;
 			// fast dense-dense operations
 			if(_a.isContiguous(_rl, _ru)) {
 				double[] avals = _a.values(_rl);
 				double[] cvals = _c.values(_rl);
 				int start = _a.pos(_rl), end = _a.pos(_ru);
-				for(int i = start; i < end; i++) {
+				int max = (end - start) % speciesLen;
+
+				int i = start;
+				for(; i < start + max; i++) {
 					cvals[i] = _op.fn.execute(avals[i]);
 					nnz += (cvals[i] != 0) ? 1 : 0;
+				}
+
+				for(; i < end; i += speciesLen) {
+					aVec = DoubleVector.fromArray(SPECIES, avals, i);
+					res = aVec.lanewise(VectorOperators.EXP);
+					res.intoArray(cvals, i);
+					nnz += res.compare(VectorOperators.NE, 0).trueCount();
 				}
 			}
 			// generic dense-dense, including large blocks
@@ -2489,9 +2503,18 @@ public class LibMatrixBincell2 {
 					double[] avals = _a.values(i);
 					double[] cvals = _c.values(i);
 					int pos = _a.pos(i);
-					for(int j = 0; j < clen; j++) {
+					int max = clen % speciesLen;
+					int j = 0;
+					for(; j < max; j++) {
 						cvals[pos + j] = _op.fn.execute(avals[pos + j]);
 						nnz += (cvals[pos + j] != 0) ? 1 : 0;
+					}
+
+					for(; j < clen; j += speciesLen) {
+						aVec = DoubleVector.fromArray(SPECIES, avals, pos + j);
+						res = aVec.lanewise(VectorOperators.EXP);
+						res.intoArray(cvals, pos + j);
+						nnz += res.compare(VectorOperators.NE, 0).trueCount();
 					}
 				}
 			}
