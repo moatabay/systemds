@@ -288,7 +288,7 @@ public class MatrixSIMDPerformance {
 				for(int col : colArr) { // Varying sizes for col
 					MatrixBlock m1 = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 7);
 					MatrixBlock retScalar = new MatrixBlock(row, col, false);
-					MatrixBlock retSIMD = MatrixBlock.randOperations(row, col, sparsity, -10, 10, "uniform", 9); // need to do it?
+					MatrixBlock retSIMD = new MatrixBlock(row, col, false);
 
 					UnaryOperator expOperator = new UnaryOperator(Builtin.getBuiltinFnObject(Builtin.BuiltinCode.EXP), k);
 
@@ -396,7 +396,7 @@ public class MatrixSIMDPerformance {
 				prefix = "perfMultSparseDenseMM_";
 			}
 			if(rows2 <= 2*1024 && cols2 == 1) {
-				prefix = "perfMultSparseDenseMVShortRHS";
+				prefix = "perfMultSparseDenseMVShortRHS_";
 			}
 		} else if(sparsity1 >= 0.4 && sparsity2 < 0.4) { // DENSE SPARSE
 			prefix = "perfMultDenseSparse_";
@@ -409,21 +409,21 @@ public class MatrixSIMDPerformance {
 		if(sparsity2 < 1.0)
 			return prefix;
 
-		if(sparsity1 >= 0.4 && sparseRet) {
+		if(sparsity1 >= 0.4 && !sparseRet) {
 			if(rows2 == 1 && cols2 > 1) {
-				prefix = "perfSafeBinaryMVDenseRowVector";
+				prefix = "perfSafeBinaryMVDenseRowVector_";
 			} else if(rows2 > 1 && cols2 == 1) {
-				prefix = "perfSafeBinaryMVDenseColVector";
+				prefix = "perfSafeBinaryMVDenseColVector_";
 			} else if(rows2 > 1 && cols2 > 1) {
-				prefix = "perfSafeBinaryMMDenseDenseDense";
+				prefix = "perfSafeBinaryMMDenseDenseDense_";
 			}
 		} else if(sparsity1 < 0.4) {
 			if(sparseRet && rows2 > 1 && cols2 == 1) { // Check necessary because of potential invocation of safeBinaryMVSparseDenseRow
-				prefix = "perfSafeBinaryMVSparseColVector";
-			} else if(!sparseRet && rows2 == 1 && cols2 > 1) {
-				prefix = "perfSafeBinaryMVSparseRowVector";
+				prefix = "perfSafeBinaryMVSparseColVector_";
+			} else if(sparseRet && rows2 == 1 && cols2 > 1) {
+				prefix = "perfSafeBinaryMVSparseRowVector_";
 			} else if(sparseRet && rows2 > 1 && cols2 > 1) {
-				prefix = "perfSafeBinaryMMSparseDenseSkip";
+				prefix = "perfSafeBinaryMMSparseDenseSkip_";
 			}
 		}
 		return BASE_PATH + prefix + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_s3=" + sparseRet

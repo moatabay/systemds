@@ -495,9 +495,8 @@ public class LibMatrixBincell2 {
 		final int m = m1.rlen;
 		final int n = m1.clen;
 
-		if(m1.sparse && ret.sparse) // SPARSE <- SPARSE //TODO: This as well? Can that even be called in exp?
+		if(m1.sparse && ret.sparse) // SPARSE <- SPARSE
 		{
-			System.out.println("m1.sparse && ret.sparse");
 			ret.allocateSparseRowsBlock();
 			SparseBlock a = m1.sparseBlock;
 			SparseBlock c = ret.sparseBlock;
