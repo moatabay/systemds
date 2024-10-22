@@ -4,6 +4,7 @@ import org.apache.sysds.conf.ConfigurationManager;
 import org.apache.sysds.conf.DMLConfig;
 import org.apache.sysds.runtime.functionobjects.Builtin;
 import org.apache.sysds.runtime.functionobjects.Divide;
+import org.apache.sysds.runtime.functionobjects.Multiply;
 import org.apache.sysds.runtime.functionobjects.Power;
 import org.apache.sysds.runtime.matrix.data.*;
 import org.apache.sysds.runtime.matrix.operators.BinaryOperator;

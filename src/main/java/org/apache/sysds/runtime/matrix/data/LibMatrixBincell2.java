@@ -1551,10 +1551,14 @@ public class LibMatrixBincell2 {
 
 		// prepare second input and allocate output
 		MatrixBlock b = m1.sparse ? m2 : m1;
-		double[] bvals = b.getDenseBlockValues();
-		int bRows = m2.getNumRows();
+		DenseBlock denseBlock = b.getDenseBlock();
+		boolean isBContigiuous = b.getDenseBlock().isContiguous();
+		double[] bvals = null;
+		if(isBContigiuous) {
+			bvals = b.getDenseBlockValues();
+		}
+		int bCols = m2.getNumColumns();
 		DoubleVector aVec, bVec, res;
-		VectorMask<Double> mask;
 
 		// guard for postponed allocation in single-threaded exec
 		if(!ret.isAllocated())
@@ -1569,6 +1573,9 @@ public class LibMatrixBincell2 {
 			int alen = a.size(i);
 			int[] aix = a.indexes(i);
 			double[] avals = a.values(i);
+			if(!isBContigiuous) {
+				bvals = denseBlock.values(i);
+			}
 
 			if(ret.sparse && !b.sparse)
 				ret.sparseBlock.allocate(i, alen);
@@ -1577,7 +1584,7 @@ public class LibMatrixBincell2 {
 			int max = len % speciesLen;
 
 			int k = apos;
-			for(; k < max; k++) {
+			for(; k < apos + max; k++) {
 				double in2 = b.get(i, aix[k]);
 				if(in2 == 0)
 					continue;
@@ -1588,19 +1595,16 @@ public class LibMatrixBincell2 {
 
 			for (; k < len; k += speciesLen) {
 				aVec = DoubleVector.fromArray(SPECIES, avals, k);
-				// Needs to be done this way, doing it via b.values(i) is broken in this specific case.
-				bVec = DoubleVector.fromArray(SPECIES, bvals, i*bRows, aix, k);
+				bVec = isBContigiuous ? DoubleVector.fromArray(SPECIES, bvals, i*bCols, aix, k) :
+						DoubleVector.fromArray(SPECIES, bvals, 0, aix, k);
 
-				mask = bVec.compare(VectorOperators.NE, 0.0); // True where the value is != 0
 				res = aVec.div(bVec);
 
 				// Store results where the mask allows
-				for (int l = 0; l < speciesLen; l++) {
-					if (mask.laneIsSet(l)) {  // Only append non-zero results
-						val = res.lane(l);
-						lnnz += (val != 0) ? 1 : 0;
-						ret.appendValuePlain(i, aix[k + l], val);
-					}
+				for(int l = 0; l < speciesLen; l++) {
+					val = res.lane(l);
+					lnnz += (val != 0) ? 1 : 0;
+					ret.appendValuePlain(i, aix[k + l], val);
 				}
 			}
 		}
