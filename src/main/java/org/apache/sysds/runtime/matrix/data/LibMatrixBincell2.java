@@ -528,6 +528,8 @@ public class LibMatrixBincell2 {
 			SparseBlock a = m1.sparseBlock;
 			DenseBlock c = ret.denseBlock;
 			long nnz = (ret.nonZeros > 0) ? (long) m * n - a.size() : 0;
+			DoubleVector aVec, res;
+			int len, max;
 
 			for(int i = 0; i < m; i++) {
 				if(a.isEmpty(i))
@@ -539,25 +541,23 @@ public class LibMatrixBincell2 {
 				double[] cvals = c.values(i);
 				int cix = c.pos(i);
 
-				int len = apos + alen;
-				int max = len % speciesLen;
-				DoubleVector aVec;
+				len = apos + alen;
+				max = SPECIES.loopBound(len);
 
 				int j = apos;
+				// Vectorized iteration
+				for(; j < max; j += speciesLen) {
+					aVec = DoubleVector.fromArray(SPECIES, avals, j);
+					res = aVec.lanewise(VectorOperators.EXP);
+					res.intoArray(cvals, cix, aix, j);
+					nnz += res.compare(VectorOperators.NE, 0).trueCount();
+				}
 
 				// Rest
-				for(; j < max; j++) {
+				for(; j < len; j++) {
 					double val = op.fn.execute(avals[j]);
 					cvals[cix + aix[j]] = val;
 					nnz += (val != 0) ? 1 : 0;
-				}
-
-				// Vectorized iteration
-				for(; j < len; j += speciesLen) {
-					aVec = DoubleVector.fromArray(SPECIES, avals, j);
-					aVec.lanewise(VectorOperators.EXP).intoArray(cvals, cix, aix, j);
-					nnz += speciesLen; // all values in aVec are always != 0 when op = exp because exp always returns a
-									// value > 0
 				}
 			}
 			ret.nonZeros = nnz;
@@ -569,6 +569,7 @@ public class LibMatrixBincell2 {
 				ret.allocateDenseBlock(false);
 			DenseBlock da = m1.getDenseBlock();
 			DenseBlock dc = ret.getDenseBlock();
+			DoubleVector aVec, res;
 
 			// unary op, incl nnz maintenance
 			long nnz = 0;
@@ -577,22 +578,21 @@ public class LibMatrixBincell2 {
 				double[] a = da.valuesAt(bi);
 				double[] c = dc.valuesAt(bi);
 				int len = da.size(bi);
-				int max = len % speciesLen;
-				DoubleVector aVec;
-
-				// Rest
-				int i = 0;
-				for(; i < max; i++) {
-					c[i] = op.fn.execute(a[i]);
-					nnz += (c[i] != 0) ? 1 : 0;
-				}
+				int max = SPECIES.loopBound(len);
 
 				// Vectorized iteration
-				for(; i < len; i += speciesLen) {
+				int i = 0;
+				for(; i < max; i += speciesLen) {
 					aVec = DoubleVector.fromArray(SPECIES, a, i);
-					aVec.lanewise(VectorOperators.EXP).intoArray(c, i);
-					nnz += speciesLen; // all values in aVec are always != 0 when op = exp because exp always returns a
-									// value > 0
+					res = aVec.lanewise(VectorOperators.EXP);
+					res.intoArray(c, i);
+					nnz += res.compare(VectorOperators.NE, 0).trueCount();
+				}
+
+				// Rest
+				for(; i < len; i++) {
+					c[i] = op.fn.execute(a[i]);
+					nnz += (c[i] != 0) ? 1 : 0;
 				}
 			}
 			ret.nonZeros = nnz;
@@ -742,8 +742,7 @@ public class LibMatrixBincell2 {
 			}
 		}
 		else {
-			int len = clen;
-			int max = len % speciesLen;
+			int max = SPECIES.loopBound(clen);
 			DoubleVector aVec, bVec, res;
 
 			for(int i = rl; i < ru; i++) {
@@ -757,16 +756,16 @@ public class LibMatrixBincell2 {
 
 				// GENERAL CASE
 				int j = 0;
-				for(; j < max; j++) {
-					double val = op.fn.execute(a[ix + j], v2);
-					nnz += ((c[ix + j] = val) != 0) ? 1 : 0;
-				}
-
-				for(; j < len; j += speciesLen) {
+				for(; j < max; j += speciesLen) {
 					aVec = DoubleVector.fromArray(SPECIES, a, ix + j);
 					res = aVec.div(bVec);
 					res.intoArray(c, ix + j);
 					nnz += res.compare(VectorOperators.NE, 0).trueCount();
+				}
+
+				for(; j < clen; j++) {
+					double val = op.fn.execute(a[ix + j], v2);
+					nnz += ((c[ix + j] = val) != 0) ? 1 : 0;
 				}
 			}
 		}
@@ -809,22 +808,22 @@ public class LibMatrixBincell2 {
 				double[] c = dc.values(i);
 				int ix = da.pos(i);
 
-				int max = clen % speciesLen;
+				int max = SPECIES.loopBound(clen);
 
 				int j = 0;
-				// Rest
-				for(; j < max; j++) {
-					double val = op.fn.execute(a[ix + j], ((b != null) ? b[j] : 0));
-					nnz += ((c[ix + j] = val) != 0) ? 1 : 0;
-				}
-
 				// Vectorized iteration
-				for(; j < clen; j += speciesLen) {
+				for(; j < max; j += speciesLen) {
 					aVec = DoubleVector.fromArray(SPECIES, a, ix + j);
 					bVec = DoubleVector.fromArray(SPECIES, b, j);
 					res = aVec.div(bVec);
 					res.intoArray(c, ix + j);
 					nnz += res.compare(VectorOperators.NE, 0).trueCount();
+				}
+
+				// Rest
+				for(; j < clen; j++) {
+					double val = op.fn.execute(a[ix + j], ((b != null) ? b[j] : 0));
+					nnz += ((c[ix + j] = val) != 0) ? 1 : 0;
 				}
 			}
 		}
@@ -927,19 +926,10 @@ public class LibMatrixBincell2 {
 					double[] avals = a.values(i);
 
 					int len = apos + alen;
-					int max = len % speciesLen;
+					int max = SPECIES.loopBound(len);
 
 					int j = apos;
-					for(; j < max; j++) {
-						// empty left
-						fillZeroValues(op, v2, ret, skipEmpty, i, lastIx + 1, aix[j]);
-						// actual value
-						double v = op.fn.execute(avals[j], v2);
-						ret.appendValue(i, aix[j], v);
-						lastIx = aix[j];
-					}
-					
-					for(; j < len; j += speciesLen) {
+					for(; j < max; j += speciesLen) {
 						fillZeroValues(op, v2, ret, skipEmpty, i, lastIx + 1, aix[j]);
 
 						aVec = DoubleVector.fromArray(SPECIES, avals, j);
@@ -948,6 +938,15 @@ public class LibMatrixBincell2 {
 						for(int k = 0; k < speciesLen; k++) {
 							ret.appendValue(i, aix[j + k], res.lane(k));
 						}
+						lastIx = aix[j];
+					}
+
+					for(; j < len; j++) {
+						// empty left
+						fillZeroValues(op, v2, ret, skipEmpty, i, lastIx + 1, aix[j]);
+						// actual value
+						double v = op.fn.execute(avals[j], v2);
+						ret.appendValue(i, aix[j], v);
 						lastIx = aix[j];
 					}
 				}
@@ -983,19 +982,9 @@ public class LibMatrixBincell2 {
 				double[] avals = a.values(i);
 
 				int len = apos + alen;
-				int max = len % speciesLen;
+				int max = SPECIES.loopBound(len);
 				int j = apos;
-				for(; j < max; j++) {
-					// empty left
-					fillZeroValues(op, m2, ret, skipEmpty, i, lastIx + 1, aix[j]);
-					// actual value
-					double v2 = m2.get(0, aix[j]);
-					double v = op.fn.execute(avals[j], v2);
-					ret.appendValue(i, aix[j], v);
-					lastIx = aix[j];
-				}
-
-				for(; j < len; j += speciesLen) {
+				for(; j < max; j += speciesLen) {
 					// empty left
 					fillZeroValues(op, m2, ret, skipEmpty, i, lastIx + 1, aix[j]);
 
@@ -1007,6 +996,16 @@ public class LibMatrixBincell2 {
 						ret.appendValue(i, aix[j + k], res.lane(k));
 					}
 
+					lastIx = aix[j];
+				}
+
+				for(; j < len; j++) {
+					// empty left
+					fillZeroValues(op, m2, ret, skipEmpty, i, lastIx + 1, aix[j]);
+					// actual value
+					double v2 = m2.get(0, aix[j]);
+					double v = op.fn.execute(avals[j], v2);
+					ret.appendValue(i, aix[j], v);
 					lastIx = aix[j];
 				}
 			}
@@ -1481,19 +1480,13 @@ public class LibMatrixBincell2 {
 		final double[] c = dc.values(0);
 
 		int len = da.pos(ru);
-		int max = (da.pos(ru) - da.pos(rl)) % speciesLen;
+		int max = SPECIES.loopBound(len);
 		DoubleVector aVec, bVec, cVec, res;
 
 		// Rest
 		int i = da.pos(rl);
-
-		for(; i < da.pos(rl) + max; i++) {
-			c[i] += op.fn.execute(a[i], b[i]);
-			lnnz += (c[i] != 0) ? 1 : 0;
-		}
-
 		// Vectorized iteration
-		for(; i < len; i += speciesLen) {
+		for(; i < max; i += speciesLen) {
 			aVec = DoubleVector.fromArray(SPECIES, a, i);
 			bVec = DoubleVector.fromArray(SPECIES, b, i);
 			cVec = DoubleVector.fromArray(SPECIES, c, i);
@@ -1503,6 +1496,11 @@ public class LibMatrixBincell2 {
 			res.intoArray(c, i);
 
 			lnnz += res.compare(VectorOperators.NE, 0).trueCount(); // Count lnnz
+		}
+
+		for(; i < len; i++) {
+			c[i] += op.fn.execute(a[i], b[i]);
+			lnnz += (c[i] != 0) ? 1 : 0;
 		}
 
 		return lnnz;
@@ -1523,21 +1521,20 @@ public class LibMatrixBincell2 {
 			int pos = da.pos(i);
 
 			int len = pos + clen;
-			int max = len % speciesLen;
+			int max = SPECIES.loopBound(len);
 
 			int j = pos;
-			for(; j < max; j++) {
-				c[j] = fn.execute(a[j], b[j]);
-				lnnz += (c[j] != 0) ? 1 : 0;
-			}
-
-			for(; j < len; j += speciesLen) {
+			for(; j < max; j += speciesLen) {
 				aVec = DoubleVector.fromArray(SPECIES, a, j);
 				bVec = DoubleVector.fromArray(SPECIES, b, j);
 				res = aVec.div(bVec);
 				res.intoArray(c, j);
-
 				lnnz += res.compare(VectorOperators.NE, 0).trueCount();
+			}
+
+			for(; j < len; j++) {
+				c[j] = fn.execute(a[j], b[j]);
+				lnnz += (c[j] != 0) ? 1 : 0;
 			}
 		}
 		return lnnz;
@@ -1581,19 +1578,9 @@ public class LibMatrixBincell2 {
 				ret.sparseBlock.allocate(i, alen);
 
 			int len = apos + alen;
-			int max = len % speciesLen;
-
+			int max = SPECIES.loopBound(len);
 			int k = apos;
-			for(; k < apos + max; k++) {
-				double in2 = b.get(i, aix[k]);
-				if(in2 == 0)
-					continue;
-				val = op.fn.execute(avals[k], in2);
-				lnnz += (val != 0) ? 1 : 0;
-				ret.appendValuePlain(i, aix[k], val);
-			}
-
-			for (; k < len; k += speciesLen) {
+			for (; k < max; k += speciesLen) {
 				aVec = DoubleVector.fromArray(SPECIES, avals, k);
 				bVec = isBContigiuous ? DoubleVector.fromArray(SPECIES, bvals, i*bCols, aix, k) :
 						DoubleVector.fromArray(SPECIES, bvals, 0, aix, k);
@@ -1606,6 +1593,15 @@ public class LibMatrixBincell2 {
 					lnnz += (val != 0) ? 1 : 0;
 					ret.appendValuePlain(i, aix[k + l], val);
 				}
+			}
+
+			for(; k < len; k++) {
+				double in2 = b.get(i, aix[k]);
+				if(in2 == 0)
+					continue;
+				val = op.fn.execute(avals[k], in2);
+				lnnz += (val != 0) ? 1 : 0;
+				ret.appendValuePlain(i, aix[k], val);
 			}
 		}
 		return lnnz;
@@ -1819,18 +1815,12 @@ public class LibMatrixBincell2 {
 						c.allocate(r, alen);
 
 					int len = apos + alen;
-					int max = len % speciesLen;
+					int max = SPECIES.loopBound(len);
 					DoubleVector aVec, res;
 
 					// Rest
 					int j = apos;
-					for(; j < apos + max; j++) {
-						val = op.executeScalar(avals[j]);
-						c.append(r, aix[j], val);
-						nnz += (val != 0) ? 1 : 0;
-					}
-
-					for(; j < len; j += speciesLen) {
+					for(; j < max; j += speciesLen) {
 						aVec = DoubleVector.fromArray(SPECIES, avals, j);
 						res = aVec.lanewise(VectorOperators.POW, exponent);
 						for(int i = 0; i < speciesLen; i++) {
@@ -1838,6 +1828,12 @@ public class LibMatrixBincell2 {
 							c.append(r, aix[j + i], val);
 							nnz += (val != 0) ? 1 : 0;
 						}
+					}
+
+					for(; j < len; j++) {
+						val = op.executeScalar(avals[j]);
+						c.append(r, aix[j], val);
+						nnz += (val != 0) ? 1 : 0;
 					}
 				}
 			}
@@ -1938,19 +1934,19 @@ public class LibMatrixBincell2 {
 			double[] a = da.valuesAt(0);
 			double[] c = dc.valuesAt(0);
 
-			max = (ru - rl) % speciesLen;
-			// Rest
-			for(; i < rl + max; i++) { // VECTOR
-				c[i] = op.executeScalar(a[i]);
-				nnz += (c[i] != 0) ? 1 : 0;
-			}
-
+			max = SPECIES.loopBound(ru);
 			// Vectorized iteration
-			for(; i < ru; i += speciesLen) {
+			for(; i < max; i += speciesLen) {
 				aVec = DoubleVector.fromArray(SPECIES, a, i);
 				res = aVec.lanewise(VectorOperators.POW, exponent);
 				res.intoArray(c, i);
 				nnz += res.compare(VectorOperators.NE, 0).trueCount();
+			}
+
+			// Rest
+			for(; i < ru; i++) { // VECTOR
+				c[i] = op.executeScalar(a[i]);
+				nnz += (c[i] != 0) ? 1 : 0;
 			}
 		}
 		else { // MULTI-COL MATRIX
@@ -1960,18 +1956,18 @@ public class LibMatrixBincell2 {
 				double[] c = dc.values(i);
 				int apos = da.pos(i), cpos = dc.pos(i);
 
-				max = clen % speciesLen;
+				max = SPECIES.loopBound(clen);
 				int j = 0;
-				for(; j < max; j++) {
-					c[cpos + j] = op.executeScalar(a[apos + j]);
-					nnz += (c[cpos + j] != 0) ? 1 : 0;
-				}
-
-				for(; j < clen; j += speciesLen) {
+				for(; j < max; j += speciesLen) {
 					aVec = DoubleVector.fromArray(SPECIES, a, apos + j);
 					res = aVec.lanewise(VectorOperators.POW, exponent);
 					res.intoArray(c, cpos + j);
 					nnz += res.compare(VectorOperators.NE, 0).trueCount();
+				}
+
+				for(; j < clen; j++) {
+					c[cpos + j] = op.executeScalar(a[apos + j]);
+					nnz += (c[cpos + j] != 0) ? 1 : 0;
 				}
 			}
 		}

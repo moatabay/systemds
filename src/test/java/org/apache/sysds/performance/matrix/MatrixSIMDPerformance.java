@@ -32,7 +32,6 @@ public class MatrixSIMDPerformance {
 
 	public static void matrixMultTest(double sparsity1, double sparsity2, String rows1, String cols1, String cols2,
 		int k, int warmupRuns, String dmlPath) {
-		String outputPath = getOutputPathMultTest(sparsity1, sparsity2, k);
 
 		try {
 			Files.createDirectories(Paths.get(BASE_PATH));
@@ -55,6 +54,7 @@ public class MatrixSIMDPerformance {
 		int[] col1Arr = calculateSizes(cols1);
 		int[] col2Arr = calculateSizes(cols2);
 
+		String outputPath = getOutputPathMultTest(sparsity1, sparsity2, rowArr[0], col1Arr[0], col1Arr[0], col2Arr[0], k);
 		startWarmupMultTest(sparsity1, sparsity2, rowArr[0], col1Arr[0], col2Arr[0], k, warmupRuns);
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
@@ -134,7 +134,6 @@ public class MatrixSIMDPerformance {
 
 	public static void matrixDivTest(double sparsity1, double sparsity2, boolean sparseRet, String rows1, String cols1,
 		String rows2, String cols2, int k, int warmupRuns) {
-		String outputPath = getOutputPathDivTest(sparsity1, sparsity2, sparseRet, k);
 
 		try {
 			Files.createDirectories(Paths.get(BASE_PATH));
@@ -148,6 +147,7 @@ public class MatrixSIMDPerformance {
 		int[] row2Arr = calculateSizes(rows2);
 		int[] col2Arr = calculateSizes(cols2);
 
+		String outputPath = getOutputPathDivTest(sparsity1, sparsity2, sparseRet, row2Arr[0], col2Arr[0], k);
 		startWarmupDivTest(sparsity1, sparsity2, sparseRet, row1Arr[0], col1Arr[0], row2Arr[0], col2Arr[0], k, warmupRuns);
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
@@ -205,7 +205,6 @@ public class MatrixSIMDPerformance {
 
 	public static void matrixPowerTest(double sparsity, String rows, String cols, double exponent, int k,
 		int warmupRuns) {
-		String outputPath = getOutputPathPowerTest(sparsity, exponent, k);
 
 		try {
 			Files.createDirectories(Paths.get(BASE_PATH));
@@ -217,6 +216,7 @@ public class MatrixSIMDPerformance {
 		int[] rowArr = calculateSizes(rows);
 		int[] colArr = calculateSizes(cols);
 
+		String outputPath = getOutputPathPowerTest(sparsity, exponent, k);
 		startWarmupPowerTest(sparsity, rowArr[0], colArr[0], exponent, k, warmupRuns);
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
@@ -266,7 +266,6 @@ public class MatrixSIMDPerformance {
 	}
 
 	public static void matrixExpTest(double sparsity, String rows, String cols, int k, int warmupRuns) {
-		String outputPath = getOutputPathExpTest(sparsity, k);
 
 		try {
 			Files.createDirectories(Paths.get(BASE_PATH));
@@ -278,6 +277,7 @@ public class MatrixSIMDPerformance {
 		int[] rowArr = calculateSizes(rows);
 		int[] colArr = calculateSizes(cols);
 
+		String outputPath = getOutputPathExpTest(sparsity, k);
 		startWarmupExpTest(sparsity, rowArr[0], colArr[0], k, warmupRuns);
 
 		try(FileWriter writer = new FileWriter(outputPath)) {
@@ -381,23 +381,64 @@ public class MatrixSIMDPerformance {
 		}
 	}
 
-	public static String getOutputPathMultTest(double sparsity1, double sparsity2, int k) {
-		return BASE_PATH + "perfMult_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_k=" + k + ".csv";
+	public static String getOutputPathMultTest(double sparsity1, double sparsity2, int rows1, int cols1, int rows2, int cols2, int k) {
+		String prefix = "INVALID_";
+		if(sparsity1 >= 0.4 && sparsity2 >= 0.4) { // DENSE DENSE
+			//TODO: Case for MM
+			if(rows1 > 17 && cols1 > 1 && cols2 > 1) {
+				prefix = "perfMultDenseDenseMM_";
+			}
+			if(rows2 <= 2*1024 && cols2 == 1) {
+				prefix = "perfMultDenseDenseMVShortRHS_";
+			}
+		} else if(sparsity1 < 0.4 && sparsity2 >= 0.4) { // SPARSE DENSE
+			if(rows1 > 17 && cols1 > 1 && cols2 > 1) {
+				prefix = "perfMultSparseDenseMM_";
+			}
+			if(rows2 <= 2*1024 && cols2 == 1) {
+				prefix = "perfMultSparseDenseMVShortRHS";
+			}
+		} else if(sparsity1 >= 0.4 && sparsity2 < 0.4) { // DENSE SPARSE
+			prefix = "perfMultDenseSparse_";
+		}
+		return BASE_PATH + prefix + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_k=" + k + ".csv";
 	}
 
-	public static String getOutputPathDivTest(double sparsity1, double sparsity2, boolean sparseRet, int k) {
-		// TODO: add different names for plots for different div cases
-		return BASE_PATH + "perfDiv_" + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_s3=" + sparseRet
+	public static String getOutputPathDivTest(double sparsity1, double sparsity2, boolean sparseRet, int rows2, int cols2, int k) {
+		String prefix = "INVALID_";
+		if(sparsity2 < 1.0)
+			return prefix;
+
+		if(sparsity1 >= 0.4 && sparseRet) {
+			if(rows2 == 1 && cols2 > 1) {
+				prefix = "perfSafeBinaryMVDenseRowVector";
+			} else if(rows2 > 1 && cols2 == 1) {
+				prefix = "perfSafeBinaryMVDenseColVector";
+			} else if(rows2 > 1 && cols2 > 1) {
+				prefix = "perfSafeBinaryMMDenseDenseDense";
+			}
+		} else if(sparsity1 < 0.4) {
+			if(sparseRet && rows2 > 1 && cols2 == 1) { // Check necessary because of potential invocation of safeBinaryMVSparseDenseRow
+				prefix = "perfSafeBinaryMVSparseColVector";
+			} else if(!sparseRet && rows2 == 1 && cols2 > 1) {
+				prefix = "perfSafeBinaryMVSparseRowVector";
+			} else if(sparseRet && rows2 > 1 && cols2 > 1) {
+				prefix = "perfSafeBinaryMMSparseDenseSkip";
+			}
+		}
+		return BASE_PATH + prefix + getTimeStamp() + "_s1=" + sparsity1 + "_s2=" + sparsity2 + "_s3=" + sparseRet
 			+ "_k=" + k + ".csv";
 	}
 
 	public static String getOutputPathPowerTest(double sparsity1, double exponent, int k) {
+		String prefix = sparsity1 < 0.4 ? "perfPowerSparse_" : "perfPowerDense_";
 		return BASE_PATH + "perfPower_" + getTimeStamp() + "_s1=" + sparsity1 + "_exponent=" + exponent + "_k=" + k
 			+ ".csv";
 	}
 
 	public static String getOutputPathExpTest(double sparsity1, int k) {
-		return BASE_PATH + "perfExp_" + getTimeStamp() + "_s1=" + sparsity1 + "_k=" + k + ".csv";
+		String prefix = sparsity1 < 0.4 ? "perfExpSparse_" : "perfExpDense_";
+		return BASE_PATH + prefix + getTimeStamp() + "_s1=" + sparsity1 + "_k=" + k + ".csv";
 	}
 
 	public static String getTimeStamp() {
