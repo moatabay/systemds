@@ -26,6 +26,22 @@ public class FFMPerformance {
     alternative implementation with the Foreign memory API
     * implement our Java matrix multiplication and elementwise operations to
     work directly with the Foreign memory API.
+
+    Me:
+    As far as I understood, I need to implement three "kinds" of performance tests for the Foreign Memory API, right?
+
+    Microbenchmark of allocations: For example the allocation of a 5000x5000 matrix in the Foreign Memory API versus ByteBuffers (or JNI?).
+    Of course I will do it with multiple size.
+    The invocation of native BLAS operations (for example "dmmdd") to compare the speed between JNI and the Foreign Memory API.
+    And I still didn't really understand this part: "implement our Java matrix multiplication and elementwise operations to
+    work directly with the Foreign memory API." because the Foreign Memory API is only there to invoke native functions and allocate off-heap memory.
+    So I guess I didn't really understand how the Foreign Memory API can work with matrix multiplication (apart from calling LibMatrixNative)
+    and the elementwise operations.
+
+    Matthias:
+    ad 3: you could change these operations to get every value over the
+    foreign memory API (similar to using Unsafe), right? If so, we would
+    want to quantify this overhead.
      */
 
     public static void test() {

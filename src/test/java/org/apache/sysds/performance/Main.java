@@ -19,6 +19,9 @@
 
 package org.apache.sysds.performance;
 
+import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.VectorOperators;
+import jdk.incubator.vector.VectorSpecies;
 import org.apache.sysds.performance.compression.IOBandwidth;
 import org.apache.sysds.performance.compression.SchemaTest;
 import org.apache.sysds.performance.compression.Serialize;
@@ -36,6 +39,8 @@ import org.apache.sysds.runtime.frame.data.FrameBlock;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
 import org.apache.sysds.runtime.util.CommonThreadPool;
 import org.apache.sysds.test.TestUtils;
+
+import java.util.Arrays;
 
 import static org.apache.sysds.performance.matrix.MatrixSIMDPerformance.*;
 
@@ -136,6 +141,15 @@ public class Main {
 				break;
 			case 2010:
 				run2010(args);
+				break;
+			case 2011:
+				run2011(args);
+				break;
+			case 2012:
+				run2012(args);
+				break;
+			case 2013:
+				run2013(args);
 				break;
 			default:
 				break;
@@ -410,23 +424,42 @@ public class Main {
 	// ##############################
 
 	// Tests for Matrix Mult
+	private static void run2009(String[] args) {
+		VectorSpecies<Double> SPECIES = DoubleVector.SPECIES_PREFERRED;
+		double[] arr = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};
+		int max = SPECIES.loopBound(arr.length);
+		int i = 0;
+		for(; i < max; i += SPECIES.length()) {
+			DoubleVector vec = DoubleVector.fromArray(SPECIES, arr, i);
+			DoubleVector res = vec.lanewise(VectorOperators.ADD, 1);
+			res.intoArray(arr, i);
+		}
+
+		for(; i < arr.length; i++) {
+			arr[i]++;
+		}
+
+		System.out.println(Arrays.toString(arr));
+	}
+
+	// Tests for Matrix Mult
 	private static void run2010(String[] args) {
-		VectorAndFFMAPIPerformance.runMatrixMultTests(args[1]);
+		VectorAndFFMAPIPerformance.runMatrixMultTests(args[1], args[2], args[3], Integer.parseInt(args[4]), Integer.parseInt(args[5]), args[6]);
 	}
 
 	// Tests for Matrix Div
 	private static void run2011(String[] args) {
-
+		VectorAndFFMAPIPerformance.runMatrixDivTests(args[1], args[2], Integer.parseInt(args[3]), Integer.parseInt(args[4]));
 	}
 
 	// Tests for Matrix Power
 	private static void run2012(String[] args) {
-
+		VectorAndFFMAPIPerformance.runMatrixPowerTests(args[1], args[2], Integer.parseInt(args[3]), Integer.parseInt(args[4]));
 	}
 
 	// Tests for Matrix Exp
 	private static void run2013(String[] args) {
-
+		VectorAndFFMAPIPerformance.runMatrixExpTests(args[1], args[2], Integer.parseInt(args[3]), Integer.parseInt(args[4]));
 	}
 
 	//TODO: Split it up into smaller pieces?
