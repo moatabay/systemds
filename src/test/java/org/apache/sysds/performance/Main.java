@@ -416,7 +416,7 @@ public class Main {
 	}
 
 	private static void run2004(String[] args) {
-		FFMPerformance.test();
+		FFMPerformance.memoryAllocationTest(Double.parseDouble(args[1]), Integer.parseInt(args[2]), Integer.parseInt(args[3]), Integer.parseInt(args[4]));
 	}
 
 	// ##############################

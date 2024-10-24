@@ -1,7 +1,14 @@
 package org.apache.sysds.performance.matrix;
 
+import org.apache.sysds.runtime.matrix.data.MatrixBlock;
+import sun.misc.Unsafe;
+
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.VarHandle;
+import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.DoubleBuffer;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -43,6 +50,19 @@ public class FFMPerformance {
     foreign memory API (similar to using Unsafe), right? If so, we would
     want to quantify this overhead.
      */
+
+    private static final Unsafe UNSAFE;
+
+    static {
+        try {
+            // Use reflection to access the Unsafe instance
+            Field field = Unsafe.class.getDeclaredField("theUnsafe");
+            field.setAccessible(true);
+            UNSAFE = (Unsafe) field.get(null);
+        } catch (Exception e) {
+            throw new RuntimeException("Unable to access Unsafe", e);
+        }
+    }
 
     public static void test() {
         int m = 2; // Rows of A (resulting matrix C)
@@ -121,5 +141,127 @@ public class FFMPerformance {
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static void memoryAllocationTest(double sparsity, String rows, String cols, int warmupRuns) {
+        MatrixBlock mb = MatrixBlock.randOperations(rows, cols, sparsity, -10, 10, "uniform", 93);
+
+        int[] rowArr = calculateSizes(rows);
+        int[] colArr = calculateSizes(cols);
+
+        for(int row : rowArr) {
+            for(int col : colArr) {
+
+            }
+        }
+
+        int size = rows*cols*Double.BYTES;
+        long t1, t2, t3;
+        double avg1 = 0, avg2 = 0, avg3 = 0;
+
+        // Allocate Memory in FFM API
+        for(int i = 0; i < warmupRuns; i++) {
+            try (Arena arena = Arena.ofConfined()) {
+                MemorySegment segment = arena.allocateArray(ValueLayout.JAVA_DOUBLE, mb.getDenseBlockValues());
+            }
+        }
+
+        for(int i = 0; i < 10; i++) {
+            t1 = System.nanoTime();
+            try (Arena arena = Arena.ofConfined()) {
+                MemorySegment segment = arena.allocateArray(ValueLayout.JAVA_DOUBLE, mb.getDenseBlockValues());
+            }
+            avg1 += System.nanoTime() - t1;
+        }
+
+
+        // Allocate Memory in ByteBuffers
+        for(int i = 0; i < warmupRuns; i++) {
+            ByteBuffer byteBuffer = ByteBuffer.allocateDirect(size);
+            DoubleBuffer doubleBuffer = byteBuffer.asDoubleBuffer();
+            doubleBuffer.put(mb.getDenseBlockValues());
+        }
+
+        for(int i = 0; i < 10; i++) {
+            t2 = System.nanoTime();
+            ByteBuffer byteBuffer = ByteBuffer.allocateDirect(size);
+            DoubleBuffer doubleBuffer = byteBuffer.asDoubleBuffer();
+            doubleBuffer.put(mb.getDenseBlockValues());
+            avg2 += System.nanoTime() - t2;
+        }
+
+        // Allocate Memory in Unsafe
+        for(int i = 0; i < warmupRuns; i++) {
+            long memoryAddress = UNSAFE.allocateMemory(size);
+
+            for(int j = 0; j < rows*cols; j++) {
+                UNSAFE.putDouble(memoryAddress + j * Double.BYTES, mb.getDenseBlockValues()[j]);
+            }
+
+            UNSAFE.freeMemory(memoryAddress);
+        }
+
+        for(int i = 0; i < 10; i++) {
+            t3 = System.nanoTime();
+            long memoryAddress = UNSAFE.allocateMemory(size);
+
+            for(int j = 0; j < rows*cols; j++) {
+                UNSAFE.putDouble(memoryAddress + j * Double.BYTES, mb.getDenseBlockValues()[j]);
+            }
+            avg3 += System.nanoTime() - t3;
+            UNSAFE.freeMemory(memoryAddress);
+        }
+
+        avg1 /= 10;
+        avg2 /= 10;
+        avg3 /= 10;
+
+        System.out.println("FFM API: " + avg1);
+        System.out.println("ByteBuffer: " + avg2);
+        System.out.println("UNSAFE: " + avg3);
+    }
+
+    public static void test2() {
+        MemoryLayout POINT_2D = MemoryLayout.structLayout(
+                ValueLayout.JAVA_DOUBLE.withName("x"),
+                ValueLayout.JAVA_DOUBLE.withName("y")
+        );
+
+        VarHandle xHandle = POINT_2D.varHandle(MemoryLayout.PathElement.groupElement("x"));
+        VarHandle yHandle = POINT_2D.varHandle(MemoryLayout.PathElement.groupElement("y"));
+
+        try(Arena arena = Arena.ofConfined()) {
+            MemorySegment point = arena.allocate(POINT_2D);
+            xHandle.set(point, 0, 3d);
+            yHandle.set(point, 0, 4d);
+
+            System.out.println(xHandle.toString());
+            System.out.println(yHandle.toString());
+
+        }
+
+    }
+
+    private static int[] calculateSizes(String stepStr) {
+        String[] strArr = stepStr.split("-");
+
+        if(strArr.length == 1) {
+            // stepStr only contains 1 value
+            return new int[] {Integer.parseInt(strArr[0])};
+        }
+
+        // Continue with split string
+        String[] strArr2 = strArr[1].split("#");
+        int start = Integer.valueOf(strArr[0]);
+        int end = Integer.valueOf(strArr2[0]);
+        int step = Integer.valueOf(strArr2[1]);
+
+        int n = ((int) (end - start) / step) + 1;
+
+        int[] sizes = new int[n];
+        for(int i = 0; i < sizes.length; i++) {
+            sizes[i] = start + step * i;
+        }
+        return sizes;
     }
 }
